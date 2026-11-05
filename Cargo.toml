@@ -1,0 +1,20 @@
+[package]
+name = "nservo"
+version = "0.1.0"
+edition = "2021"
+authors = ["NServo Developers"]
+description = "Modern keyboard-centric browser based on Servo, inspired by Neovim and qutebrowser."
+license = "MIT"
+
+[dependencies]
+tokio = { version = "1.43", features = ["full"] }
+mlua = { version = "0.12", features = ["lua54", "vendored"] }
+rusqlite = { version = "0.33", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+winit = "0.29.15"
+softbuffer = "0.4.8"
+regex = "1.11"
+thiserror = "2.0"
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
