@@ -41,7 +41,7 @@ fn normal_mode_scroll_and_mode_switches() {
     );
     assert_eq!(
         mapper.handle_key(Mode::Normal, KeyInput::Char('i'), now),
-        KeyOutcome::Action(BrowserAction::EnterMode(Mode::Input))
+        KeyOutcome::Action(BrowserAction::EnterMode(Mode::Insert))
     );
     assert_eq!(
         mapper.handle_key(Mode::Normal, KeyInput::Char(':'), now),
@@ -85,7 +85,7 @@ fn gt_and_g_shift_t_switch_tabs_within_400ms() {
 }
 
 #[test]
-fn gg_scrolls_to_top_within_timeout() {
+fn gg_and_go_trigger_within_timeout() {
     let mut mapper = KeyMapper::new();
     let t0 = Instant::now();
 
@@ -100,6 +100,20 @@ fn gg_scrolls_to_top_within_timeout() {
             t0 + Duration::from_millis(100)
         ),
         KeyOutcome::Action(BrowserAction::ScrollTop)
+    );
+
+    let t1 = t0 + Duration::from_millis(600);
+    assert_eq!(
+        mapper.handle_key(Mode::Normal, KeyInput::Char('g'), t1),
+        KeyOutcome::Pending("g".to_string())
+    );
+    assert_eq!(
+        mapper.handle_key(
+            Mode::Normal,
+            KeyInput::Char('o'),
+            t1 + Duration::from_millis(200)
+        ),
+        KeyOutcome::Action(BrowserAction::EditCurrentUrl)
     );
 }
 
@@ -143,16 +157,16 @@ fn pending_g_expires_after_400ms() {
 }
 
 #[test]
-fn input_and_command_modes_pass_through_except_escape() {
+fn insert_and_command_modes_pass_through_except_escape() {
     let mut mapper = KeyMapper::new();
     let now = Instant::now();
 
     assert_eq!(
-        mapper.handle_key(Mode::Input, KeyInput::Char('j'), now),
+        mapper.handle_key(Mode::Insert, KeyInput::Char('j'), now),
         KeyOutcome::PassThrough
     );
     assert_eq!(
-        mapper.handle_key(Mode::Input, KeyInput::Escape, now),
+        mapper.handle_key(Mode::Insert, KeyInput::Escape, now),
         KeyOutcome::Action(BrowserAction::EnterMode(Mode::Normal))
     );
 

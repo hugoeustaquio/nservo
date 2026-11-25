@@ -17,6 +17,6 @@ pub use session::{
 };
 pub use tab_model::{TabInfo, TabModel};
 pub use text_input::{
-    DeadKey, DeadKeyComposer, compose_dead_key, decode_utf16_units, encode_utf16_units,
-    needs_utf16_injection,
+    DeadKey, DeadKeyComposer, LineEdge, WordDirection, compose_dead_key, decode_utf16_units,
+    encode_utf16_units, needs_utf16_injection,
 };

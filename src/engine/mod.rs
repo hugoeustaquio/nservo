@@ -1,3 +1,4 @@
+pub mod clipboard;
 pub mod epoxy;
 pub mod gpu;
 pub mod hints_js;

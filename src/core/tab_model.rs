@@ -114,10 +114,15 @@ impl TabModel {
         Some(removed.id)
     }
 
-    pub fn update_url(&mut self, id: u64, url: String) {
-        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+    /// Update a tab's URL, returning `true` if the URL actually changed.
+    pub fn update_url(&mut self, id: u64, url: String) -> bool {
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id)
+            && tab.url != url
+        {
             tab.url = url;
+            return true;
         }
+        false
     }
 
     pub fn update_title(&mut self, id: u64, title: String) {

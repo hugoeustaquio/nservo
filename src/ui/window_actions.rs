@@ -14,6 +14,13 @@ impl BrowserWindow {
         match action {
             BrowserAction::EnterMode(mode) => self.set_mode(mode),
             BrowserAction::EnterCommandWith(prefix) => self.transition_mode(Mode::Command, &prefix),
+            BrowserAction::EditCurrentUrl => {
+                let prefix = match self.tab_view.active_url() {
+                    Some(url) if !url.is_empty() => format!("open {url}"),
+                    _ => "open ".to_string(),
+                };
+                self.transition_mode(Mode::Command, &prefix);
+            }
             BrowserAction::StartHints => {
                 self.set_mode(Mode::Hint);
                 self.hints.start(&self.tab_view);
@@ -29,6 +36,31 @@ impl BrowserWindow {
             BrowserAction::InsertText(text) => {
                 if let Some(tab) = self.tab_view.active_tab() {
                     tab.insert_utf16_text(&text);
+                }
+            }
+            BrowserAction::MoveWord { direction, select } => {
+                if let Some(tab) = self.tab_view.active_tab() {
+                    tab.move_word(direction, select);
+                }
+            }
+            BrowserAction::MoveLineEdge(edge) => {
+                if let Some(tab) = self.tab_view.active_tab() {
+                    tab.move_line_edge(edge);
+                }
+            }
+            BrowserAction::CopySelection => {
+                if let Some(tab) = self.tab_view.active_tab() {
+                    tab.copy_selection();
+                }
+            }
+            BrowserAction::CutSelection => {
+                if let Some(tab) = self.tab_view.active_tab() {
+                    tab.cut_selection();
+                }
+            }
+            BrowserAction::PasteClipboard => {
+                if let Some(tab) = self.tab_view.active_tab() {
+                    tab.paste_from_clipboard();
                 }
             }
             BrowserAction::ScrollDown
@@ -66,6 +98,12 @@ impl BrowserWindow {
         }
     }
 
+    pub(super) fn handle_navigation(&self, tab_id: u64) {
+        if self.mode.get() == Mode::Insert && self.tab_view.active_tab_id() == Some(tab_id) {
+            self.set_mode(Mode::Normal);
+        }
+    }
+
     pub(super) fn handle_hint_event(&self, tab_id: u64, event: HintEvent) {
         if self.mode.get() != Mode::Hint || self.tab_view.active_tab_id() != Some(tab_id) {
             return;
@@ -73,7 +111,7 @@ impl BrowserWindow {
         match event {
             HintEvent::Shown { .. } => {}
             HintEvent::Activated { is_input } => {
-                self.set_mode(if is_input { Mode::Input } else { Mode::Normal });
+                self.set_mode(if is_input { Mode::Insert } else { Mode::Normal });
             }
             HintEvent::Cancelled => self.set_mode(Mode::Normal),
             HintEvent::Empty => {

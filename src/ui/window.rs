@@ -72,7 +72,8 @@ impl BrowserWindow {
         };
 
         let tab_view = {
-            let (s_ch, s_pop, s_hint) = (
+            let (s_ch, s_pop, s_hint, s_nav) = (
+                controller_slot.clone(),
                 controller_slot.clone(),
                 controller_slot.clone(),
                 controller_slot.clone(),
@@ -91,6 +92,11 @@ impl BrowserWindow {
                 on_hint_event: Rc::new(move |tab_id, event| {
                     if let Some(ctrl) = get_ctrl(&s_hint) {
                         ctrl.handle_hint_event(tab_id, event);
+                    }
+                }),
+                on_navigation: Rc::new(move |tab_id| {
+                    if let Some(ctrl) = get_ctrl(&s_nav) {
+                        ctrl.handle_navigation(tab_id);
                     }
                 }),
             })
@@ -180,11 +186,11 @@ impl BrowserWindow {
 
         self.mode.set(next);
         self.key_handler.reset_pending();
-        self.key_handler.set_input_active(next == Mode::Input);
+        self.key_handler.set_input_active(next == Mode::Insert);
         *self.pending_keys.borrow_mut() = None;
 
         match next {
-            Mode::Normal | Mode::Input | Mode::Hint => {
+            Mode::Normal | Mode::Insert | Mode::Hint => {
                 self.command_bar.exit_command_mode();
                 self.tab_view.focus_active();
             }

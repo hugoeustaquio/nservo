@@ -6,7 +6,10 @@ use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 
-use crate::core::{BrowserAction, KEY_SEQUENCE_TIMEOUT, KeyInput, KeyMapper, KeyOutcome, Mode};
+use crate::core::{
+    BrowserAction, KEY_SEQUENCE_TIMEOUT, KeyInput, KeyMapper, KeyOutcome, LineEdge, Mode,
+    WordDirection,
+};
 use crate::ui::im_bridge::{ImBridge, ImOutcome};
 
 /// Callbacks connecting GTK key capture events to the browser window controller.
@@ -41,7 +44,7 @@ impl KeyHandler {
         self.mapper.borrow_mut().clear_pending();
     }
 
-    /// Notify the GTK input method context when entering or leaving Input mode.
+    /// Notify the GTK input method context when entering or leaving Insert mode.
     pub fn set_input_active(&self, active: bool) {
         self.im.set_active(active);
     }
@@ -53,7 +56,7 @@ impl KeyHandler {
         self.im.attach(
             window,
             Rc::new(move |text| {
-                if mode_async.get() == Mode::Input {
+                if mode_async.get() == Mode::Insert {
                     on_action_async(BrowserAction::InsertText(text));
                 }
             }),
@@ -69,7 +72,7 @@ impl KeyHandler {
 
         let handler_rel = self.clone();
         controller.connect_key_released(move |ctrl, _keyval, _keycode, _modifiers| {
-            if handler_rel.mode.get() == Mode::Input {
+            if handler_rel.mode.get() == Mode::Insert {
                 handler_rel
                     .im
                     .handle_key_release(ctrl.current_event().as_ref());
@@ -101,14 +104,28 @@ impl KeyHandler {
             return glib::Propagation::Stop;
         }
 
+        // Editing & clipboard chords: Ctrl+C in Normal/Insert; Ctrl+X/V/A/E in Insert.
+        if let Some(action) = match_ctrl_editing_chord(current_mode, keyval, modifiers) {
+            (callbacks.on_action)(action);
+            return glib::Propagation::Stop;
+        }
+
+        // In Insert mode, Ctrl+Arrow / Ctrl+Shift+Arrow moves or selects by word.
+        if current_mode == Mode::Insert
+            && let Some(action) = match_word_motion(keyval, modifiers)
+        {
+            (callbacks.on_action)(action);
+            return glib::Propagation::Stop;
+        }
+
         // Allow WM / system chords (Ctrl, Alt, Super, Meta) to pass through.
         if has_non_text_modifier(modifiers) {
             return glib::Propagation::Proceed;
         }
 
-        // In Input mode, Escape returns to Normal; everything else goes through
+        // In Insert mode, Escape returns to Normal; everything else goes through
         // the IME / UTF-16 dead-key bridge before reaching servo-gtk.
-        if current_mode == Mode::Input {
+        if current_mode == Mode::Insert {
             if keyval == gdk::Key::Escape {
                 (callbacks.on_action)(BrowserAction::EnterMode(Mode::Normal));
                 return glib::Propagation::Stop;
@@ -169,6 +186,56 @@ impl KeyHandler {
     fn cancel_timer(&self) {
         self.timer_gen.set(self.timer_gen.get().wrapping_add(1));
     }
+}
+
+fn match_ctrl_editing_chord(
+    mode: Mode,
+    keyval: gdk::Key,
+    modifiers: gdk::ModifierType,
+) -> Option<BrowserAction> {
+    let has_ctrl = modifiers.contains(gdk::ModifierType::CONTROL_MASK);
+    let has_other = modifiers.intersects(
+        gdk::ModifierType::SHIFT_MASK
+            | gdk::ModifierType::ALT_MASK
+            | gdk::ModifierType::SUPER_MASK
+            | gdk::ModifierType::META_MASK,
+    );
+    if !has_ctrl || has_other {
+        return None;
+    }
+
+    match (mode, keyval) {
+        (Mode::Normal | Mode::Insert, gdk::Key::c | gdk::Key::C) => {
+            Some(BrowserAction::CopySelection)
+        }
+        (Mode::Insert, gdk::Key::x | gdk::Key::X) => Some(BrowserAction::CutSelection),
+        (Mode::Insert, gdk::Key::v | gdk::Key::V) => Some(BrowserAction::PasteClipboard),
+        (Mode::Insert, gdk::Key::a | gdk::Key::A) => {
+            Some(BrowserAction::MoveLineEdge(LineEdge::Start))
+        }
+        (Mode::Insert, gdk::Key::e | gdk::Key::E) => {
+            Some(BrowserAction::MoveLineEdge(LineEdge::End))
+        }
+        _ => None,
+    }
+}
+
+fn match_word_motion(keyval: gdk::Key, modifiers: gdk::ModifierType) -> Option<BrowserAction> {
+    let has_ctrl = modifiers.contains(gdk::ModifierType::CONTROL_MASK);
+    let has_other = modifiers.intersects(
+        gdk::ModifierType::ALT_MASK | gdk::ModifierType::SUPER_MASK | gdk::ModifierType::META_MASK,
+    );
+    if !has_ctrl || has_other {
+        return None;
+    }
+
+    let direction = match keyval {
+        gdk::Key::Left | gdk::Key::KP_Left => WordDirection::Left,
+        gdk::Key::Right | gdk::Key::KP_Right => WordDirection::Right,
+        _ => return None,
+    };
+    let select = modifiers.contains(gdk::ModifierType::SHIFT_MASK);
+    Some(BrowserAction::MoveWord { direction, select })
 }
 
 fn translate_key(keyval: gdk::Key) -> KeyInput {

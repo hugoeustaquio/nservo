@@ -5,7 +5,7 @@ use std::fmt;
 pub enum Mode {
     #[default]
     Normal,
-    Input,
+    Insert,
     Command,
     Hint,
 }
@@ -15,7 +15,7 @@ impl Mode {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Normal => "NORMAL",
-            Self::Input => "INPUT",
+            Self::Insert => "INSERT",
             Self::Command => "COMMAND",
             Self::Hint => "HINT",
         }
@@ -25,7 +25,7 @@ impl Mode {
     pub const fn css_class(self) -> &'static str {
         match self {
             Self::Normal => "mode-normal",
-            Self::Input => "mode-input",
+            Self::Insert => "mode-insert",
             Self::Command => "mode-command",
             Self::Hint => "mode-hint",
         }

@@ -46,6 +46,9 @@ fn metadata_updates_reflect_in_display_title() {
         "https://example.com"
     );
 
+    assert!(!model.update_url(id, "https://example.com".to_string()));
+    assert!(model.update_url(id, "https://example.org".to_string()));
+
     model.update_title(id, "Example Domain".to_string());
     model.set_loading(id, true);
     let tab = model.active_tab().unwrap();

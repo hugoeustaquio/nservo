@@ -10,12 +10,13 @@ use crate::engine::hints_js::HINT_MESSAGE_HANDLER;
 use crate::engine::start_page;
 use crate::engine::web_tab::WebTab;
 
-/// Callbacks emitted when tab metadata changes, a popup opens, or hints report an event.
+/// Callbacks emitted when tab metadata changes, navigation occurs, popups open, or hints report.
 #[derive(Clone)]
 pub struct TabViewCallbacks {
     pub on_state_changed: Rc<dyn Fn()>,
     pub on_popup_url: Rc<dyn Fn(String)>,
     pub on_hint_event: Rc<dyn Fn(u64, HintEvent)>,
+    pub on_navigation: Rc<dyn Fn(u64)>,
 }
 
 /// Hosts one [`WebTab`] per tab inside a [`gtk::Stack`].
@@ -162,6 +163,10 @@ impl TabView {
         self.model.borrow().active_tab().map(|tab| tab.id)
     }
 
+    pub fn active_url(&self) -> Option<String> {
+        self.model.borrow().active_tab().map(|tab| tab.url.clone())
+    }
+
     pub fn active_web_view(&self) -> Option<WebView> {
         self.active_tab().map(|tab| tab.view().clone())
     }
@@ -223,31 +228,39 @@ impl TabView {
     fn wire_signals(&self, id: u64, web_tab: &WebTab) {
         let view = web_tab.view();
 
-        let model = self.model.clone();
-        let on_change = self.callbacks.on_state_changed.clone();
-        let tab = web_tab.clone();
+        let (model, on_change, on_nav, tab) = (
+            self.model.clone(),
+            self.callbacks.on_state_changed.clone(),
+            self.callbacks.on_navigation.clone(),
+            web_tab.clone(),
+        );
         view.connect_uri_notify(move |v| {
-            let Some(uri) = v.uri() else {
-                return;
-            };
-            if !tab.is_ready() && uri == "about:blank" {
+            let Some(uri) = v.uri() else { return };
+            let ready = tab.is_ready();
+            if !ready && uri == "about:blank" {
                 return;
             }
-            model.borrow_mut().update_url(id, uri);
+            let changed = model.borrow_mut().update_url(id, uri);
             on_change();
+            if ready && changed {
+                on_nav(id);
+            }
         });
 
-        let model = self.model.clone();
-        let on_change = self.callbacks.on_state_changed.clone();
+        let (model, on_change) = (self.model.clone(), self.callbacks.on_state_changed.clone());
         view.connect_title_notify(move |v| {
-            let title = v.title().unwrap_or_default();
-            model.borrow_mut().update_title(id, title);
+            model
+                .borrow_mut()
+                .update_title(id, v.title().unwrap_or_default());
             on_change();
         });
 
-        let model = self.model.clone();
-        let on_change = self.callbacks.on_state_changed.clone();
-        let tab = web_tab.clone();
+        let (model, on_change, on_nav, tab) = (
+            self.model.clone(),
+            self.callbacks.on_state_changed.clone(),
+            self.callbacks.on_navigation.clone(),
+            web_tab.clone(),
+        );
         view.connect_load_changed(move |_, event| {
             if matches!(event, LoadEvent::Finished) {
                 if tab.mark_ready_and_flush() {
@@ -258,6 +271,9 @@ impl TabView {
             let loading = matches!(event, LoadEvent::Started);
             model.borrow_mut().set_loading(id, loading);
             on_change();
+            if loading && tab.is_ready() {
+                on_nav(id);
+            }
         });
 
         let on_change = self.callbacks.on_state_changed.clone();

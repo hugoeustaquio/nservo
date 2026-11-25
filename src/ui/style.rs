@@ -52,7 +52,7 @@ window.nservo-window {
     background-color: #7aa2f7;
 }
 
-.mode-badge.mode-input {
+.mode-badge.mode-insert {
     background-color: #9ece6a;
 }
 

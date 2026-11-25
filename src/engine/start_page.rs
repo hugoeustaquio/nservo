@@ -33,7 +33,7 @@ pub const HELP_PAGE_HTML: &str = r#"<!DOCTYPE html>
   <h2>Modes</h2>
   <table>
     <tr><td>NORMAL</td><td>Default navigation &amp; shortcut mode (press <code>Esc</code> from any mode).</td></tr>
-    <tr><td>INPUT</td><td>Press <code>i</code> to pass keystrokes directly to the page.</td></tr>
+    <tr><td>INSERT</td><td>Press <code>i</code> to pass keystrokes directly to the page.</td></tr>
     <tr><td>COMMAND</td><td>Press <code>:</code> to enter Ex-style commands at the bottom bar.</td></tr>
     <tr><td>HINT</td><td>Press <code>f</code> to label clickable elements and type their letters to click/focus them.</td></tr>
   </table>
@@ -44,12 +44,13 @@ pub const HELP_PAGE_HTML: &str = r#"<!DOCTYPE html>
     <tr><td>h / l</td><td>Scroll left / scroll right</td></tr>
     <tr><td>gg / G</td><td>Scroll to top / scroll to bottom</td></tr>
     <tr><td>gt / gT</td><td>Next tab / previous tab (400ms sequence window)</td></tr>
+    <tr><td>go</td><td>Edit current page URL in Command mode (<code>:open &lt;URL&gt;</code>)</td></tr>
     <tr><td>f</td><td>Show letter hints on links, buttons, and inputs</td></tr>
     <tr><td>d</td><td>Close current tab</td></tr>
     <tr><td>o / O</td><td>Open Command mode pre-filled with <code>:open </code> / <code>:Open </code></td></tr>
     <tr><td>H / L</td><td>Go back / go forward in history</td></tr>
     <tr><td>r</td><td>Reload current tab</td></tr>
-    <tr><td>i</td><td>Enter INPUT mode</td></tr>
+    <tr><td>i</td><td>Enter INSERT mode</td></tr>
     <tr><td>:</td><td>Enter COMMAND mode</td></tr>
   </table>
 

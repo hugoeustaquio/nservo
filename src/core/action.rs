@@ -1,4 +1,4 @@
-use crate::core::Mode;
+use crate::core::{LineEdge, Mode, WordDirection};
 
 /// High-level browser actions produced by key bindings or Ex-style commands.
 #[derive(Debug, Clone, PartialEq)]
@@ -7,6 +7,8 @@ pub enum BrowserAction {
     EnterMode(Mode),
     /// Enter Command mode with pre-filled command text (e.g. `"open "`, `"Open "`).
     EnterCommandWith(String),
+    /// Enter Command mode pre-filled with `:open <current URL>` (`go`).
+    EditCurrentUrl,
 
     /// Link/element hint mode actions (`f`).
     StartHints,
@@ -15,6 +17,18 @@ pub enum BrowserAction {
 
     /// Insert composed or Unicode/UTF-16 text into the focused page input.
     InsertText(String),
+    /// Move or extend selection by one word in the focused page input (`Ctrl[+Shift]+Arrow`).
+    MoveWord {
+        direction: WordDirection,
+        select: bool,
+    },
+    /// Move caret to the start (`Ctrl+A`) or end (`Ctrl+E`) of the current line.
+    MoveLineEdge(LineEdge),
+
+    /// System clipboard actions (`Ctrl+C` / `Ctrl+X` / `Ctrl+V`).
+    CopySelection,
+    CutSelection,
+    PasteClipboard,
 
     /// Viewport scrolling actions.
     ScrollDown,

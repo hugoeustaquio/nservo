@@ -17,9 +17,9 @@ pub enum ImOutcome {
     PassThrough,
 }
 
-/// Bridges GTK4's [`gtk::IMMulticontext`] (plus a fallback [`DeadKeyComposer`])
-/// so dead keys, Portuguese accents, Compose sequences, and system IMEs work
-/// reliably inside `servo-gtk` inputs.
+/// Bridges dead-key composition ([`DeadKeyComposer`]) and GTK4's [`gtk::IMMulticontext`]
+/// so Portuguese accents, dead keys, direct Unicode keys, and system IMEs work
+/// reliably inside `servo-gtk` inputs on both Wayland and X11.
 #[derive(Clone)]
 pub struct ImBridge {
     im: gtk::IMMulticontext,
@@ -71,6 +71,39 @@ impl ImBridge {
     }
 
     pub fn handle_key_press(&self, event: Option<&gdk::Event>, keyval: gdk::Key) -> ImOutcome {
+        // 1. Handle dead keys directly so Wayland/X11 IM quirks never swallow them.
+        if let Some(dead) = gdk_dead_key(keyval) {
+            return match self.composer.borrow_mut().push_dead_key(dead) {
+                Some(text) => ImOutcome::InsertText(text),
+                None => ImOutcome::Composing,
+            };
+        }
+
+        // 2. If a dead key is pending, compose it with the next printable key.
+        if self.composer.borrow().has_pending() {
+            if keyval == gdk::Key::BackSpace {
+                self.composer.borrow_mut().reset();
+                return ImOutcome::Composing;
+            }
+            if let Some(ch) = keyval.to_unicode()
+                && !ch.is_control()
+                && let Some(composed) = self.composer.borrow_mut().push_char(ch)
+            {
+                return ImOutcome::InsertText(composed);
+            }
+            self.composer.borrow_mut().reset();
+            return ImOutcome::PassThrough;
+        }
+
+        // 3. Direct non-ASCII Unicode keys (e.g. 'ç' on Brazilian ABNT2).
+        if let Some(ch) = keyval.to_unicode()
+            && !ch.is_ascii()
+            && !ch.is_control()
+        {
+            return ImOutcome::InsertText(ch.to_string());
+        }
+
+        // 4. Delegate remaining keys to GTK's system IME (Compose, IBus, Fcitx, emoji).
         if let Some(ev) = event {
             *self.sync_commit.borrow_mut() = None;
             self.filtering.set(true);
@@ -80,7 +113,6 @@ impl ImBridge {
             let committed = self.sync_commit.borrow_mut().take();
             if let Some(text) = committed {
                 let was_composed = self.in_im_composition.replace(false);
-                self.composer.borrow_mut().reset();
                 return if needs_utf16_injection(&text, was_composed) {
                     ImOutcome::InsertText(text)
                 } else {
@@ -93,28 +125,13 @@ impl ImBridge {
             }
         }
 
-        if let Some(dead) = gdk_dead_key(keyval) {
-            return match self.composer.borrow_mut().push_dead_key(dead) {
-                Some(text) => ImOutcome::InsertText(text),
-                None => ImOutcome::Composing,
-            };
-        }
-
-        if let Some(ch) = keyval.to_unicode()
-            && ch != '\0'
-        {
-            if let Some(composed) = self.composer.borrow_mut().push_char(ch) {
-                return ImOutcome::InsertText(composed);
-            }
-            if !ch.is_ascii() {
-                return ImOutcome::InsertText(ch.to_string());
-            }
-        }
-
         ImOutcome::PassThrough
     }
 
     pub fn handle_key_release(&self, event: Option<&gdk::Event>) {
+        if self.composer.borrow().has_pending() {
+            return;
+        }
         if let Some(ev) = event {
             self.im.filter_keypress(ev);
         }

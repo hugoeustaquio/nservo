@@ -59,7 +59,7 @@ impl KeyMapper {
     pub fn handle_key(&mut self, mode: Mode, input: KeyInput, now: Instant) -> KeyOutcome {
         match mode {
             Mode::Normal => self.handle_normal(input, now),
-            Mode::Input => self.handle_input(input),
+            Mode::Insert => self.handle_insert(input),
             Mode::Command => self.handle_command(input),
             Mode::Hint => self.handle_hint(input),
         }
@@ -108,7 +108,7 @@ impl KeyMapper {
             }
             KeyInput::Char('r') | KeyInput::Reload => KeyOutcome::Action(BrowserAction::Reload),
             KeyInput::Char('f') => KeyOutcome::Action(BrowserAction::StartHints),
-            KeyInput::Char('i') => KeyOutcome::Action(BrowserAction::EnterMode(Mode::Input)),
+            KeyInput::Char('i') => KeyOutcome::Action(BrowserAction::EnterMode(Mode::Insert)),
             KeyInput::Char(':') => KeyOutcome::Action(BrowserAction::EnterMode(Mode::Command)),
             KeyInput::Char(_) | KeyInput::Backspace | KeyInput::Other => KeyOutcome::Consumed,
         }
@@ -119,11 +119,12 @@ impl KeyMapper {
             ('g', KeyInput::Char('t')) => KeyOutcome::Action(BrowserAction::NextTab),
             ('g', KeyInput::Char('T')) => KeyOutcome::Action(BrowserAction::PrevTab),
             ('g', KeyInput::Char('g')) => KeyOutcome::Action(BrowserAction::ScrollTop),
+            ('g', KeyInput::Char('o')) => KeyOutcome::Action(BrowserAction::EditCurrentUrl),
             _ => KeyOutcome::Consumed,
         }
     }
 
-    fn handle_input(&mut self, input: KeyInput) -> KeyOutcome {
+    fn handle_insert(&mut self, input: KeyInput) -> KeyOutcome {
         self.pending = None;
         match input {
             KeyInput::Escape => KeyOutcome::Action(BrowserAction::EnterMode(Mode::Normal)),

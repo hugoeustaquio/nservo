@@ -1,3 +1,17 @@
+/// Direction for word-wise caret movement and selection (`Ctrl+Arrow` / `Ctrl+Shift+Arrow`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WordDirection {
+    Left,
+    Right,
+}
+
+/// Target edge for line-wise caret movement (`Ctrl+A` / `Ctrl+E`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineEdge {
+    Start,
+    End,
+}
+
 /// Encode a Rust UTF-8 string into UTF-16 code units (including surrogate pairs
 /// for supplementary Unicode scalar values).
 pub fn encode_utf16_units(text: &str) -> Vec<u16> {
@@ -114,6 +128,10 @@ impl DeadKeyComposer {
 
     pub fn reset(&mut self) {
         self.pending = None;
+    }
+
+    pub fn has_pending(&self) -> bool {
+        self.pending.is_some()
     }
 
     /// Press a dead key. Pressing the same dead key twice emits its standalone glyph.

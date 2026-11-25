@@ -6,11 +6,15 @@ use gtk::glib;
 use gtk::prelude::*;
 use servo_gtk::{UserContentManager, WebView};
 
-use crate::core::encode_utf16_units;
+use crate::core::{LineEdge, WordDirection, encode_utf16_units};
+use crate::engine::clipboard::{
+    CLIPBOARD_MESSAGE_HANDLER, copy_selection_script, cut_selection_script,
+    parse_clipboard_message, paste_into_tab, write_system_clipboard,
+};
 use crate::engine::hints_js::{
     HINT_MESSAGE_HANDLER, activate_hints_script, clear_hints_script, filter_hints_script,
 };
-use crate::engine::text_input_js::insert_utf16_script;
+use crate::engine::text_input_js::{insert_utf16_script, move_line_edge_script, move_word_script};
 
 const READY_FALLBACK_TIMEOUT: Duration = Duration::from_millis(1500);
 
@@ -50,6 +54,14 @@ impl WebTab {
     fn new_with_initial(initial: PendingLoad) -> Self {
         let user_content = UserContentManager::new();
         user_content.register_script_message_handler(HINT_MESSAGE_HANDLER);
+        user_content.register_script_message_handler(CLIPBOARD_MESSAGE_HANDLER);
+        user_content.connect_script_message_received(|_, name, body| {
+            if name == CLIPBOARD_MESSAGE_HANDLER
+                && let Some(text) = parse_clipboard_message(body)
+            {
+                write_system_clipboard(&text);
+            }
+        });
 
         let view = WebView::with_user_content_manager(&user_content);
         view.set_hexpand(true);
@@ -93,6 +105,32 @@ impl WebTab {
         if !units.is_empty() {
             self.view.evaluate_javascript(&insert_utf16_script(&units));
         }
+    }
+
+    /// Move or extend selection by one word in the focused page input.
+    pub fn move_word(&self, direction: WordDirection, select: bool) {
+        self.view
+            .evaluate_javascript(&move_word_script(direction, select));
+    }
+
+    /// Move caret to the start (`Ctrl+A`) or end (`Ctrl+E`) of the current line.
+    pub fn move_line_edge(&self, edge: LineEdge) {
+        self.view.evaluate_javascript(&move_line_edge_script(edge));
+    }
+
+    /// Copy the page or input's currently selected text to the system clipboard.
+    pub fn copy_selection(&self) {
+        self.view.evaluate_javascript(copy_selection_script());
+    }
+
+    /// Cut selected text from the focused page input to the system clipboard.
+    pub fn cut_selection(&self) {
+        self.view.evaluate_javascript(cut_selection_script());
+    }
+
+    /// Paste text from the system clipboard into the focused page input.
+    pub fn paste_from_clipboard(&self) {
+        paste_into_tab(self.clone());
     }
 
     pub fn is_ready(&self) -> bool {
