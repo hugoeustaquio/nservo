@@ -6,9 +6,11 @@ use gtk::glib;
 use gtk::prelude::*;
 use servo_gtk::{UserContentManager, WebView};
 
+use crate::core::encode_utf16_units;
 use crate::engine::hints_js::{
     HINT_MESSAGE_HANDLER, activate_hints_script, clear_hints_script, filter_hints_script,
 };
+use crate::engine::text_input_js::insert_utf16_script;
 
 const READY_FALLBACK_TIMEOUT: Duration = Duration::from_millis(1500);
 
@@ -83,6 +85,14 @@ impl WebTab {
 
     pub fn clear_hints(&self) {
         self.view.evaluate_javascript(clear_hints_script());
+    }
+
+    /// Encode `text` as UTF-16 code units and insert it into the focused input.
+    pub fn insert_utf16_text(&self, text: &str) {
+        let units = encode_utf16_units(text);
+        if !units.is_empty() {
+            self.view.evaluate_javascript(&insert_utf16_script(&units));
+        }
     }
 
     pub fn is_ready(&self) -> bool {

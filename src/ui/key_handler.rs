@@ -7,6 +7,7 @@ use gtk::glib;
 use gtk::prelude::*;
 
 use crate::core::{BrowserAction, KEY_SEQUENCE_TIMEOUT, KeyInput, KeyMapper, KeyOutcome, Mode};
+use crate::ui::im_bridge::{ImBridge, ImOutcome};
 
 /// Callbacks connecting GTK key capture events to the browser window controller.
 pub struct KeyCallbacks {
@@ -20,6 +21,7 @@ pub struct KeyCallbacks {
 pub struct KeyHandler {
     mapper: Rc<RefCell<KeyMapper>>,
     timer_gen: Rc<Cell<u64>>,
+    im: ImBridge,
     mode: Rc<Cell<Mode>>,
 }
 
@@ -28,6 +30,7 @@ impl KeyHandler {
         Self {
             mapper: Rc::new(RefCell::new(KeyMapper::new())),
             timer_gen: Rc::new(Cell::new(0)),
+            im: ImBridge::new(),
             mode,
         }
     }
@@ -38,14 +41,39 @@ impl KeyHandler {
         self.mapper.borrow_mut().clear_pending();
     }
 
+    /// Notify the GTK input method context when entering or leaving Input mode.
+    pub fn set_input_active(&self, active: bool) {
+        self.im.set_active(active);
+    }
+
     /// Attach a Capture-phase [`gtk::EventControllerKey`] to `window`.
     pub fn attach(&self, window: &gtk::ApplicationWindow, callbacks: KeyCallbacks) {
+        let on_action_async = callbacks.on_action.clone();
+        let mode_async = self.mode.clone();
+        self.im.attach(
+            window,
+            Rc::new(move |text| {
+                if mode_async.get() == Mode::Input {
+                    on_action_async(BrowserAction::InsertText(text));
+                }
+            }),
+        );
+
         let controller = gtk::EventControllerKey::new();
         controller.set_propagation_phase(gtk::PropagationPhase::Capture);
 
         let handler = self.clone();
-        controller.connect_key_pressed(move |_, keyval, _keycode, modifiers| {
-            handler.on_key_pressed(keyval, modifiers, &callbacks)
+        controller.connect_key_pressed(move |ctrl, keyval, _keycode, modifiers| {
+            handler.on_key_pressed(ctrl, keyval, modifiers, &callbacks)
+        });
+
+        let handler_rel = self.clone();
+        controller.connect_key_released(move |ctrl, _keyval, _keycode, _modifiers| {
+            if handler_rel.mode.get() == Mode::Input {
+                handler_rel
+                    .im
+                    .handle_key_release(ctrl.current_event().as_ref());
+            }
         });
 
         window.add_controller(controller);
@@ -53,6 +81,7 @@ impl KeyHandler {
 
     fn on_key_pressed(
         &self,
+        controller: &gtk::EventControllerKey,
         keyval: gdk::Key,
         modifiers: gdk::ModifierType,
         callbacks: &KeyCallbacks,
@@ -75,6 +104,24 @@ impl KeyHandler {
         // Allow WM / system chords (Ctrl, Alt, Super, Meta) to pass through.
         if has_non_text_modifier(modifiers) {
             return glib::Propagation::Proceed;
+        }
+
+        // In Input mode, Escape returns to Normal; everything else goes through
+        // the IME / UTF-16 dead-key bridge before reaching servo-gtk.
+        if current_mode == Mode::Input {
+            if keyval == gdk::Key::Escape {
+                (callbacks.on_action)(BrowserAction::EnterMode(Mode::Normal));
+                return glib::Propagation::Stop;
+            }
+            let event = controller.current_event();
+            return match self.im.handle_key_press(event.as_ref(), keyval) {
+                ImOutcome::InsertText(text) => {
+                    (callbacks.on_action)(BrowserAction::InsertText(text));
+                    glib::Propagation::Stop
+                }
+                ImOutcome::Composing => glib::Propagation::Stop,
+                ImOutcome::PassThrough => glib::Propagation::Proceed,
+            };
         }
 
         let input = translate_key(keyval);

@@ -13,6 +13,9 @@ pub enum BrowserAction {
     HintChar(char),
     HintBackspace,
 
+    /// Insert composed or Unicode/UTF-16 text into the focused page input.
+    InsertText(String),
+
     /// Viewport scrolling actions.
     ScrollDown,
     ScrollUp,

@@ -1,5 +1,6 @@
 pub mod command_bar;
 pub mod hint_controller;
+pub mod im_bridge;
 pub mod key_handler;
 pub mod session_controller;
 pub mod status_bar;
@@ -7,3 +8,4 @@ pub mod style;
 pub mod tab_bar;
 pub mod tab_view;
 pub mod window;
+mod window_actions;

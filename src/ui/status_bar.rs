@@ -2,6 +2,7 @@ use gtk::pango;
 use gtk::prelude::*;
 
 use crate::core::{Mode, TabInfo};
+use crate::engine::gpu::RenderBackend;
 
 /// Snapshot of status information rendered on the Neovim-style statusline.
 pub struct StatusSnapshot<'a> {
@@ -11,6 +12,7 @@ pub struct StatusSnapshot<'a> {
     pub tab_count: usize,
     pub zoom_level: f64,
     pub pending_keys: Option<&'a str>,
+    pub render_backend: RenderBackend,
 }
 
 /// Bottom Neovim-style statusline showing mode badge, active URL/title,
@@ -78,8 +80,9 @@ impl StatusBar {
             format!("{}/{}", snapshot.active_index + 1, snapshot.tab_count)
         };
         let zoom_pct = (snapshot.zoom_level * 100.0).round() as i32;
+        let backend = snapshot.render_backend.short_label();
         self.meta_label
-            .set_text(&format!("TAB {tab_pos}  |  {zoom_pct}%"));
+            .set_text(&format!("TAB {tab_pos}  |  {zoom_pct}%  |  {backend}"));
     }
 
     pub fn show_notice(&self, text: &str) {

@@ -53,12 +53,15 @@ flowchart TD
 - **`src/core/command.rs`** — Parses Ex-style commands (`:open <URL>`, `:Open <URL>`, `:tabnext`, `:tabprev`, `:tabclose`, `:reload`, `:back`, `:forward`, `:zoom <factor|reset>`, `:w [name]`, `:wq [name]`, `:session <name>`, `:help`, `:q`) and normalizes bare hostnames into full URLs.
 - **`src/core/session.rs`** — Serializes and loads named JSON sessions (`Session`, `SavedTab`, `SessionStore`) under `$XDG_DATA_HOME/nservo/sessions/`, validating session names and supporting automatic `"default"` session restore on startup.
 - **`src/core/tab_model.rs`** — Maintains ordered `TabInfo` metadata (`id`, `url`, `title`, `is_loading`), active tab index, wrap-around switching (`next_tab` / `prev_tab`), and safe removal on tab close.
+- **`src/core/text_input.rs`** — UTF-16 code-unit encoding/decoding (`encode_utf16_units`, `decode_utf16_units`) and fallback `DeadKeyComposer` for accented Latin/Portuguese characters and supplementary Unicode surrogate pairs.
 
 ### `src/engine/` — Servo Engine Integration
 - **`src/engine/epoxy.rs`** — Dynamically loads `libepoxy.so.0` and binds GL symbols for `servo-gtk`.
+- **`src/engine/gpu.rs`** — Detects GPU DRM render nodes (`/dev/dri/renderD*`), configures GTK4 GPU-first rendering (Vulkan → GL) with automatic CPU (Cairo) fallback when hardware acceleration is unavailable, and observes the active `GskRenderer` for statusline display.
 - **`src/engine/scroll.rs`** — Executes viewport scroll operations (`window.scrollBy` / `window.scrollTo`) via `WebView::evaluate_javascript`.
 - **`src/engine/start_page.rs`** — Provides the built-in dark Neovim-styled start and `:help` HTML page loaded via `WebView::load_html`.
 - **`src/engine/hints_js.rs`** — Injected JavaScript scripts that highlight visible links/buttons/inputs with letter badges, filter and click/focus matched elements, and post activation/input-mode events back over `UserContentManager`.
+- **`src/engine/text_input_js.rs`** — Injects UTF-16 code units via `String.fromCharCode(...)` into the focused `<input>`, `<textarea>`, or `[contenteditable]` element with native value setters and `InputEvent` dispatch.
 - **`src/engine/web_tab.rs`** — Wraps `servo_gtk::WebView` with a `UserContentManager` (`nservoHints` handler) and readiness-aware load queuing so initial loads wait for Servo's asynchronous `about:blank` browsing-context handshake (`LoadEvent::Finished`) before dispatching.
 
 ### `src/ui/` — GTK4 Neovim-Style Interface
@@ -67,6 +70,7 @@ flowchart TD
 - **`src/ui/tab_view.rs`** — Manages a `gtk::Stack` of live `WebTab` instances indexed by tab ID, wiring `notify::uri`, `notify::title`, `load-changed`, `notify::zoom-level`, and `create-web-view` (popups open as new tabs).
 - **`src/ui/status_bar.rs`** — Bottom statusline showing the active mode badge (`NORMAL`, `INPUT`, `COMMAND`), page title/URL, pending key prefix (`g`), tab counter (`1/N`), and zoom percentage.
 - **`src/ui/command_bar.rs`** — Bottom `:`-prefixed `gtk::Entry` bar shown only while in Command mode and hidden in Normal and Input modes.
+- **`src/ui/im_bridge.rs`** — Bridges `gtk::IMMulticontext` (and fallback `DeadKeyComposer`) in Input mode so dead keys, Portuguese accents, Compose sequences, and system IMEs commit UTF-16 text into web page inputs.
 - **`src/ui/key_handler.rs`** — Attaches a Capture-phase `gtk::EventControllerKey` to `ApplicationWindow`:
   - Ignores modifier-only key presses (e.g. `Shift_L`) so pressing `g` followed by `Shift+T` cleanly matches `gT`.
   - Lets system/WM chords (`Ctrl`, `Alt`, `Super`, `Meta`) propagate.

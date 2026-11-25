@@ -17,10 +17,14 @@ fn main() -> ExitCode {
     let _ = log::set_logger(&LOGGER);
     log::set_max_level(log::LevelFilter::Info);
 
-    if let Err(err) = nservo::engine::epoxy::init() {
-        eprintln!("Failed to initialize OpenGL loader: {err}");
-        return ExitCode::FAILURE;
-    }
+    let epoxy_ok = match nservo::engine::epoxy::init() {
+        Ok(()) => true,
+        Err(err) => {
+            log::warn!("OpenGL epoxy loader unavailable ({err}); will fall back to CPU");
+            false
+        }
+    };
+    let initial_backend = nservo::engine::gpu::configure_render_environment(epoxy_ok);
 
     let initial_url = std::env::args().nth(1);
     let app = Application::builder().application_id(APP_ID).build();
@@ -28,7 +32,7 @@ fn main() -> ExitCode {
     app.connect_activate(move |app| {
         nservo::ui::style::install_theme();
         let start_url = initial_url.as_deref();
-        nservo::ui::window::BrowserWindow::open(app, start_url);
+        nservo::ui::window::BrowserWindow::open(app, start_url, initial_backend);
     });
 
     app.run()

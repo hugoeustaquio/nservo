@@ -18,10 +18,16 @@ servo-gtk = { git = "https://github.com/nacho/servo-gtk" }
 [patch.crates-io]
 epoxy = { git = "https://github.com/theCapypara/epoxy-rs", rev = "7d9d88a8dfec2ddedc647b7a8f6c1e5b3e6c6ec0" }
 
-# Optimize Servo's style and layout crates even in dev builds to shrink
-# recursive stack frames and improve rendering performance.
+# Optimize Servo's style, layout, and rendering crates even in dev builds to
+# shrink recursive stack frames and improve rendering throughput.
 [profile.dev.package.stylo]
 opt-level = 2
 
 [profile.dev.package.servo-layout]
+opt-level = 2
+
+[profile.dev.package.webrender]
+opt-level = 2
+
+[profile.dev.package.servo-paint]
 opt-level = 2

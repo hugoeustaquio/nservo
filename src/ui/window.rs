@@ -3,8 +3,8 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 
-use crate::core::{BrowserAction, HintEvent, Mode, parse_command};
-use crate::engine::{scroll, start_page};
+use crate::core::{Mode, parse_command};
+use crate::engine::gpu::{self, RenderBackend};
 use crate::ui::command_bar::CommandBar;
 use crate::ui::hint_controller::HintController;
 use crate::ui::key_handler::{KeyCallbacks, KeyHandler};
@@ -13,23 +13,30 @@ use crate::ui::status_bar::{StatusBar, StatusSnapshot};
 use crate::ui::tab_bar::TabBar;
 use crate::ui::tab_view::{TabView, TabViewCallbacks};
 
+type WindowSlot = Rc<RefCell<Option<Rc<BrowserWindow>>>>;
+
+fn get_ctrl(slot: &WindowSlot) -> Option<Rc<BrowserWindow>> {
+    slot.borrow().clone()
+}
+
 /// Top-level Neovim-inspired GTK4 browser window.
 pub struct BrowserWindow {
-    window: gtk::ApplicationWindow,
-    tab_bar: TabBar,
-    tab_view: TabView,
-    status_bar: StatusBar,
-    command_bar: CommandBar,
-    key_handler: KeyHandler,
-    sessions: SessionController,
-    hints: HintController,
-    mode: Rc<Cell<Mode>>,
-    pending_keys: RefCell<Option<String>>,
+    pub(super) window: gtk::ApplicationWindow,
+    pub(super) tab_bar: TabBar,
+    pub(super) tab_view: TabView,
+    pub(super) status_bar: StatusBar,
+    pub(super) command_bar: CommandBar,
+    pub(super) key_handler: KeyHandler,
+    pub(super) sessions: SessionController,
+    pub(super) hints: HintController,
+    pub(super) mode: Rc<Cell<Mode>>,
+    pub(super) render_backend: Cell<RenderBackend>,
+    pub(super) pending_keys: RefCell<Option<String>>,
 }
 
 impl BrowserWindow {
     /// Build, wire, and present a new browser window.
-    pub fn open(app: &gtk::Application, initial_url: Option<&str>) {
+    pub fn open(app: &gtk::Application, initial_url: Option<&str>, initial_backend: RenderBackend) {
         let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title("nservo")
@@ -43,13 +50,12 @@ impl BrowserWindow {
         let status_bar = StatusBar::new();
 
         // Late-bound controller slot so widget callbacks can reach `Rc<Self>` cleanly.
-        let controller_slot: Rc<RefCell<Option<Rc<Self>>>> = Rc::new(RefCell::new(None));
+        let controller_slot: WindowSlot = Rc::new(RefCell::new(None));
 
         let tab_bar = {
             let slot = controller_slot.clone();
             TabBar::new(move |index| {
-                let ctrl = slot.borrow().clone();
-                if let Some(ctrl) = ctrl {
+                if let Some(ctrl) = get_ctrl(&slot) {
                     ctrl.exit_hint_mode_if_active();
                     ctrl.tab_view.select_index(index);
                 }
@@ -59,33 +65,31 @@ impl BrowserWindow {
         let command_bar = {
             let slot = controller_slot.clone();
             CommandBar::new(move |raw| {
-                let ctrl = slot.borrow().clone();
-                if let Some(ctrl) = ctrl {
+                if let Some(ctrl) = get_ctrl(&slot) {
                     ctrl.submit_command(&raw);
                 }
             })
         };
 
         let tab_view = {
-            let slot_change = controller_slot.clone();
-            let slot_popup = controller_slot.clone();
-            let slot_hint = controller_slot.clone();
+            let (s_ch, s_pop, s_hint) = (
+                controller_slot.clone(),
+                controller_slot.clone(),
+                controller_slot.clone(),
+            );
             TabView::new(TabViewCallbacks {
                 on_state_changed: Rc::new(move || {
-                    let ctrl = slot_change.borrow().clone();
-                    if let Some(ctrl) = ctrl {
+                    if let Some(ctrl) = get_ctrl(&s_ch) {
                         ctrl.sync_chrome();
                     }
                 }),
                 on_popup_url: Rc::new(move |url| {
-                    let ctrl = slot_popup.borrow().clone();
-                    if let Some(ctrl) = ctrl {
+                    if let Some(ctrl) = get_ctrl(&s_pop) {
                         ctrl.tab_view.open_url_in_new_tab(&url);
                     }
                 }),
                 on_hint_event: Rc::new(move |tab_id, event| {
-                    let ctrl = slot_hint.borrow().clone();
-                    if let Some(ctrl) = ctrl {
+                    if let Some(ctrl) = get_ctrl(&s_hint) {
                         ctrl.handle_hint_event(tab_id, event);
                     }
                 }),
@@ -109,11 +113,19 @@ impl BrowserWindow {
             sessions: SessionController::new(),
             hints: HintController::new(),
             mode,
+            render_backend: Cell::new(initial_backend),
             pending_keys: RefCell::new(None),
         });
 
         *controller_slot.borrow_mut() = Some(controller.clone());
         controller.attach_key_handler();
+        let slot_gpu = controller_slot.clone();
+        gpu::watch_window_backend(&window, move |backend| {
+            if let Some(ctrl) = get_ctrl(&slot_gpu) {
+                ctrl.render_backend.set(backend);
+                ctrl.sync_chrome();
+            }
+        });
 
         let slot_cleanup = controller_slot;
         window.connect_close_request(move |_| {
@@ -137,14 +149,16 @@ impl BrowserWindow {
             KeyCallbacks {
                 on_action: Rc::new(move |action| on_action_ctrl.handle_action(action)),
                 on_pending_changed: Rc::new(move |pending| {
-                    *on_pending_ctrl.pending_keys.borrow_mut() = pending.clone();
-                    on_pending_ctrl
-                        .status_bar
-                        .set_pending_keys(pending.as_deref());
+                    on_pending_ctrl.set_pending_display(pending);
                 }),
                 is_command_entry_empty: Rc::new(move || cmd_bar.is_entry_empty()),
             },
         );
+    }
+
+    pub(super) fn set_pending_display(&self, pending: Option<String>) {
+        *self.pending_keys.borrow_mut() = pending.clone();
+        self.status_bar.set_pending_keys(pending.as_deref());
     }
 
     fn submit_command(&self, raw: &str) {
@@ -155,13 +169,18 @@ impl BrowserWindow {
         }
     }
 
-    fn set_mode(&self, next: Mode) {
+    pub(super) fn set_mode(&self, next: Mode) {
+        self.transition_mode(next, "");
+    }
+
+    pub(super) fn transition_mode(&self, next: Mode, command_prefix: &str) {
         if self.mode.get() == Mode::Hint && next != Mode::Hint {
             self.hints.clear(&self.tab_view);
         }
 
         self.mode.set(next);
         self.key_handler.reset_pending();
+        self.key_handler.set_input_active(next == Mode::Input);
         *self.pending_keys.borrow_mut() = None;
 
         match next {
@@ -169,9 +188,7 @@ impl BrowserWindow {
                 self.command_bar.exit_command_mode();
                 self.tab_view.focus_active();
             }
-            Mode::Command => {
-                self.command_bar.enter_command_mode();
-            }
+            Mode::Command => self.command_bar.enter_command_mode_with(command_prefix),
         }
 
         self.sync_chrome();
@@ -180,97 +197,6 @@ impl BrowserWindow {
     fn exit_hint_mode_if_active(&self) {
         if self.mode.get() == Mode::Hint {
             self.set_mode(Mode::Normal);
-        }
-    }
-
-    fn enter_command_with(&self, initial: &str) {
-        self.exit_hint_mode_if_active();
-        self.mode.set(Mode::Command);
-        self.key_handler.reset_pending();
-        *self.pending_keys.borrow_mut() = None;
-        self.command_bar.enter_command_mode_with(initial);
-        self.sync_chrome();
-    }
-
-    fn handle_action(&self, action: BrowserAction) {
-        match action {
-            BrowserAction::EnterMode(mode) => self.set_mode(mode),
-            BrowserAction::EnterCommandWith(prefix) => self.enter_command_with(&prefix),
-            BrowserAction::StartHints => {
-                self.set_mode(Mode::Hint);
-                self.hints.start(&self.tab_view);
-            }
-            BrowserAction::HintChar(ch) => {
-                let typed = self.hints.push_char(&self.tab_view, ch);
-                *self.pending_keys.borrow_mut() = Some(typed.clone());
-                self.status_bar.set_pending_keys(Some(&typed));
-            }
-            BrowserAction::HintBackspace => match self.hints.pop_char(&self.tab_view) {
-                Some(remaining) => {
-                    let display = (!remaining.is_empty()).then_some(remaining);
-                    *self.pending_keys.borrow_mut() = display.clone();
-                    self.status_bar.set_pending_keys(display.as_deref());
-                }
-                None => self.set_mode(Mode::Normal),
-            },
-            BrowserAction::ScrollDown => self.with_active_view(scroll::scroll_down),
-            BrowserAction::ScrollUp => self.with_active_view(scroll::scroll_up),
-            BrowserAction::ScrollLeft => self.with_active_view(scroll::scroll_left),
-            BrowserAction::ScrollRight => self.with_active_view(scroll::scroll_right),
-            BrowserAction::ScrollTop => self.with_active_view(scroll::scroll_top),
-            BrowserAction::ScrollBottom => self.with_active_view(scroll::scroll_bottom),
-            BrowserAction::NextTab => self.tab_view.next_tab(),
-            BrowserAction::PrevTab => self.tab_view.prev_tab(),
-            BrowserAction::OpenInCurrentTab(url) => self.tab_view.load_url_in_active_tab(&url),
-            BrowserAction::OpenInNewTab(url) => self.tab_view.open_url_in_new_tab(&url),
-            BrowserAction::CloseTab => {
-                if !self.tab_view.close_active_tab() {
-                    self.window.close();
-                }
-            }
-            BrowserAction::Reload => self.tab_view.reload_active_tab(),
-            BrowserAction::GoBack => self.with_active_view(|v| v.go_back()),
-            BrowserAction::GoForward => self.with_active_view(|v| v.go_forward()),
-            BrowserAction::SetZoom(level) => self.with_active_view(|v| v.set_zoom_level(level)),
-            BrowserAction::ShowHelp => {
-                self.tab_view
-                    .load_html_in_active_tab("nservo — Help", start_page::HELP_PAGE_HTML);
-            }
-            BrowserAction::SaveSession(name) => {
-                self.sessions.save(&self.tab_view, &self.status_bar, &name);
-            }
-            BrowserAction::SaveSessionAndQuit(name) => {
-                if self.sessions.save(&self.tab_view, &self.status_bar, &name) {
-                    self.window.close();
-                }
-            }
-            BrowserAction::LoadSession(name) => {
-                self.sessions.load(&self.tab_view, &self.status_bar, &name);
-            }
-            BrowserAction::Quit => self.window.close(),
-        }
-    }
-
-    fn handle_hint_event(&self, tab_id: u64, event: HintEvent) {
-        if self.mode.get() != Mode::Hint || self.tab_view.active_tab_id() != Some(tab_id) {
-            return;
-        }
-        match event {
-            HintEvent::Shown { .. } => {}
-            HintEvent::Activated { is_input } => {
-                self.set_mode(if is_input { Mode::Input } else { Mode::Normal });
-            }
-            HintEvent::Cancelled => self.set_mode(Mode::Normal),
-            HintEvent::Empty => {
-                self.set_mode(Mode::Normal);
-                self.status_bar.show_notice("No clickable elements found");
-            }
-        }
-    }
-
-    fn with_active_view(&self, f: impl FnOnce(&servo_gtk::WebView)) {
-        if let Some(view) = self.tab_view.active_web_view() {
-            f(&view);
         }
     }
 
@@ -293,6 +219,7 @@ impl BrowserWindow {
             tab_count: tabs.len(),
             zoom_level,
             pending_keys: pending.as_deref(),
+            render_backend: self.render_backend.get(),
         });
     }
 }

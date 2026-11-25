@@ -5,6 +5,7 @@ pub mod keymap;
 pub mod mode;
 pub mod session;
 pub mod tab_model;
+pub mod text_input;
 
 pub use action::BrowserAction;
 pub use command::{CommandError, normalize_url, parse_command};
@@ -15,3 +16,7 @@ pub use session::{
     DEFAULT_SESSION_NAME, SavedTab, Session, SessionError, SessionStore, validate_session_name,
 };
 pub use tab_model::{TabInfo, TabModel};
+pub use text_input::{
+    DeadKey, DeadKeyComposer, compose_dead_key, decode_utf16_units, encode_utf16_units,
+    needs_utf16_injection,
+};
