@@ -1,0 +1,4 @@
+[env]
+# Stylo defaults to a 512 KiB stack for StyleThread workers, which overflows on
+# real-world websites in dev builds. Increase it to 4 MiB.
+SERVO_STYLE_THREAD_STACK_SIZE_KB = "4096"

@@ -1,0 +1,95 @@
+# nservo Architecture
+
+`nservo` is a Neovim-inspired GTK4 web browser written in Rust and powered by [`servo-gtk`](https://github.com/nacho/servo-gtk).
+
+## Design Principles
+
+- **Clean Separation of Concerns:** Pure browser state and input logic (`src/core`) are completely decoupled from GTK4 widgets (`src/ui`) and Servo engine integration (`src/engine`), making the core logic deterministically testable without a display server.
+- **Strict Modularity (`<= 300` lines per file):** Every Rust source and test file is kept small and focused on a single responsibility, enforced automatically by `tests/line_count_test.rs`.
+- **Predictable Modal Input:** Key handling uses GTK4's Capture propagation phase so Neovim shortcuts never leak into the web page during Normal mode, while Input and Command modes delegate naturally to the focused widget.
+
+## High-Level Diagram
+
+```mermaid
+flowchart TD
+    Main["src/main.rs\n(servo-gtk runner handoff, epoxy init, GTK App)"] --> Window["ui::window::BrowserWindow"]
+
+    Window --> TabBar["ui::tab_bar::TabBar"]
+    Window --> TabView["ui::tab_view::TabView"]
+    Window --> StatusBar["ui::status_bar::StatusBar"]
+    Window --> CommandBar["ui::command_bar::CommandBar"]
+    Window --> KeyHandler["ui::key_handler::KeyHandler"]
+
+    KeyHandler --> KeyMapper["core::keymap::KeyMapper\n(400ms sequence window)"]
+    CommandBar --> CmdParser["core::command::parse_command"]
+
+    KeyMapper --> Action["core::action::BrowserAction"]
+    CmdParser --> Action
+    Action --> Window
+
+    TabView --> TabModel["core::tab_model::TabModel"]
+    TabView --> WebView["servo_gtk::WebView\n(one per tab in gtk::Stack)"]
+    Window --> Scroll["engine::scroll"]
+    Scroll --> WebView
+    Window --> StartPage["engine::start_page"]
+```
+
+## Module Layout
+
+### Entry Point & Crate Root
+- **`Cargo.toml`** — Declares `gtk4` (`0.11`), `glib`/`gio` (`0.22`), `servo-gtk` (`https://github.com/nacho/servo-gtk`), `epoxy`, and `libloading`, along with the `[patch.crates-io]` entry for `epoxy` required by `servo-gtk`.
+- **`src/main.rs`** — Invokes `servo_gtk::run_as_runner_if_requested()` as its first statement (required because `servo-gtk` re-executes the application binary for Servo subprocesses), initializes the `epoxy` OpenGL loader, installs the CSS theme, and opens `BrowserWindow`.
+- **`src/lib.rs`** — Exports `core`, `engine`, and `ui` modules for both the binary target and integration tests.
+
+### `src/core/` — Pure Domain Logic
+- **`src/core/mode.rs`** — Defines `Mode` (`Normal`, `Input`, `Command`, `Hint`) along with statusline labels and CSS classes.
+- **`src/core/action.rs`** — Defines `BrowserAction`, the uniform command/action vocabulary emitted by both keybindings and Ex-style commands.
+- **`src/core/hints.rs`** — Prefix-free alphabetic hint label generator (`a`..`z`, `aa`..`zz`) and `HintEvent` JSON message parser.
+- **`src/core/keymap.rs`** — Implements `KeyMapper`, a deterministic key-sequence state machine with `KEY_SEQUENCE_TIMEOUT = 400ms`:
+  - **Normal mode:** `j`/`k` (scroll down/up), `h`/`l` (scroll left/right), `G` (scroll bottom), `gg` (scroll top), `gt`/`gT` (next/previous tab), `f` (Hint mode), `d` (close current tab), `o`/`O` (Command mode pre-filled with `:open ` / `:Open `), `H`/`L` (history back/forward), `r`/`F5` (reload), `i` (Input mode), `:` (Command mode).
+  - **Hint mode:** Captures letter keys to filter/click hinted elements (`BackSpace` edits prefix, `Esc` cancels back to Normal mode).
+  - **Input mode:** Passes keys through to the page; `Esc` returns to Normal mode.
+  - **Command mode:** Passes keys through to the command entry; `Esc` returns to Normal mode.
+- **`src/core/command.rs`** — Parses Ex-style commands (`:open <URL>`, `:Open <URL>`, `:tabnext`, `:tabprev`, `:tabclose`, `:reload`, `:back`, `:forward`, `:zoom <factor|reset>`, `:w [name]`, `:wq [name]`, `:session <name>`, `:help`, `:q`) and normalizes bare hostnames into full URLs.
+- **`src/core/session.rs`** — Serializes and loads named JSON sessions (`Session`, `SavedTab`, `SessionStore`) under `$XDG_DATA_HOME/nservo/sessions/`, validating session names and supporting automatic `"default"` session restore on startup.
+- **`src/core/tab_model.rs`** — Maintains ordered `TabInfo` metadata (`id`, `url`, `title`, `is_loading`), active tab index, wrap-around switching (`next_tab` / `prev_tab`), and safe removal on tab close.
+
+### `src/engine/` — Servo Engine Integration
+- **`src/engine/epoxy.rs`** — Dynamically loads `libepoxy.so.0` and binds GL symbols for `servo-gtk`.
+- **`src/engine/scroll.rs`** — Executes viewport scroll operations (`window.scrollBy` / `window.scrollTo`) via `WebView::evaluate_javascript`.
+- **`src/engine/start_page.rs`** — Provides the built-in dark Neovim-styled start and `:help` HTML page loaded via `WebView::load_html`.
+- **`src/engine/hints_js.rs`** — Injected JavaScript scripts that highlight visible links/buttons/inputs with letter badges, filter and click/focus matched elements, and post activation/input-mode events back over `UserContentManager`.
+- **`src/engine/web_tab.rs`** — Wraps `servo_gtk::WebView` with a `UserContentManager` (`nservoHints` handler) and readiness-aware load queuing so initial loads wait for Servo's asynchronous `about:blank` browsing-context handshake (`LoadEvent::Finished`) before dispatching.
+
+### `src/ui/` — GTK4 Neovim-Style Interface
+- **`src/ui/style.rs`** — Installs the dark Neovim CSS stylesheet via `gtk::CssProvider`.
+- **`src/ui/tab_bar.rs`** — Top tabline displaying numbered tabs, loading indicators, and active tab styling.
+- **`src/ui/tab_view.rs`** — Manages a `gtk::Stack` of live `WebTab` instances indexed by tab ID, wiring `notify::uri`, `notify::title`, `load-changed`, `notify::zoom-level`, and `create-web-view` (popups open as new tabs).
+- **`src/ui/status_bar.rs`** — Bottom statusline showing the active mode badge (`NORMAL`, `INPUT`, `COMMAND`), page title/URL, pending key prefix (`g`), tab counter (`1/N`), and zoom percentage.
+- **`src/ui/command_bar.rs`** — Bottom `:`-prefixed `gtk::Entry` bar shown only while in Command mode and hidden in Normal and Input modes.
+- **`src/ui/key_handler.rs`** — Attaches a Capture-phase `gtk::EventControllerKey` to `ApplicationWindow`:
+  - Ignores modifier-only key presses (e.g. `Shift_L`) so pressing `g` followed by `Shift+T` cleanly matches `gT`.
+  - Lets system/WM chords (`Ctrl`, `Alt`, `Super`, `Meta`) propagate.
+  - Exits Command mode when `BackSpace` is pressed on an empty command entry.
+  - Schedules/cancels a `400ms` `glib::timeout_add_local_once` timer whenever a multi-key prefix is buffered.
+- **`src/ui/hint_controller.rs`** — Tracks the typed hint prefix and coordinates hint activation, filtering, backspace, and cleanup on the active tab.
+- **`src/ui/session_controller.rs`** — Coordinates startup session restore and `:w` / `:wq` / `:session` operations between `SessionStore`, `TabView`, and `StatusBar`.
+- **`src/ui/window.rs`** — `BrowserWindow` coordinates all widgets, mode transitions, command submission, action execution, and UI chrome synchronization.
+
+## Input & Command Flow
+
+1. **Key press arrives at `ApplicationWindow`** during GTK's Capture phase (`KeyHandler`).
+2. `KeyHandler` translates the GDK key into `KeyInput` and calls `KeyMapper::handle_key(mode, input, Instant::now())`.
+3. Depending on `KeyOutcome`:
+   - `Pending(prefix)` — Starts a `400ms` GLib timeout, displays the prefix in `StatusBar`, and stops event propagation. If the timer expires before a second key arrives, the pending buffer and status indicator clear.
+   - `Action(action)` — Cancels any pending timer, dispatches `action` to `BrowserWindow::handle_action`, and stops event propagation.
+   - `Consumed` — Cancels any pending timer and stops propagation so Normal-mode keys do not leak into the `WebView`.
+   - `PassThrough` — Allows the event to reach the focused `WebView` (Input mode) or `CommandBar` entry (Command mode).
+4. **Command submission** (`Enter` in Command mode) calls `parse_command`, switches back to Normal mode, and either executes the resulting `BrowserAction` or shows the error in `CommandBar`.
+
+## Test Suite
+
+- **`tests/command_tests.rs`** — Verifies `:open` vs `:Open`, aliases, zoom validation, error cases, and URL normalization.
+- **`tests/keymap_tests.rs`** — Verifies mode transitions, `j`/`k`/`G`/`gg`, `gt`/`gT`, and exact `400ms` timeout boundary behavior (`399ms` succeeds, `400ms` expires).
+- **`tests/tab_model_tests.rs`** — Verifies tab creation, wrap-around switching, tab closure, and metadata display titles.
+- **`tests/line_count_test.rs`** — Asserts that every `.rs` file in `src/` and `tests/` contains at most 300 lines.

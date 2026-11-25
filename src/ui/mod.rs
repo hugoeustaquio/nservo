@@ -1,13 +1,9 @@
-pub mod canvas;
-pub mod colors;
-pub mod command_bar_view;
-pub mod dialog_view;
-pub mod font;
-pub mod renderer;
-pub mod status_bar_view;
-pub mod tabs_view;
-pub mod viewport_view;
-
-pub use canvas::Canvas;
-pub use colors::GuiColors;
-pub use renderer::GuiRenderer;
+pub mod command_bar;
+pub mod hint_controller;
+pub mod key_handler;
+pub mod session_controller;
+pub mod status_bar;
+pub mod style;
+pub mod tab_bar;
+pub mod tab_view;
+pub mod window;

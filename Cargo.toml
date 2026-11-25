@@ -1,20 +1,27 @@
 [package]
 name = "nservo"
 version = "0.1.0"
-edition = "2021"
-authors = ["NServo Developers"]
-description = "Modern keyboard-centric browser based on Servo, inspired by Neovim and qutebrowser."
-license = "MIT"
+edition = "2024"
+description = "A Neovim-inspired GTK4 web browser powered by servo-gtk"
 
 [dependencies]
-tokio = { version = "1.43", features = ["full"] }
-mlua = { version = "0.12", features = ["lua54", "vendored"] }
-rusqlite = { version = "0.33", features = ["bundled"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-winit = "0.29.15"
-softbuffer = "0.4.8"
-regex = "1.11"
-thiserror = "2.0"
-anyhow = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
+epoxy = "0.1.0"
+gio = "0.22"
+glib = { version = "0.22", features = ["v2_74", "log_macros"] }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+libloading = "0.9"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+servo-gtk = { git = "https://github.com/nacho/servo-gtk" }
+
+[patch.crates-io]
+epoxy = { git = "https://github.com/theCapypara/epoxy-rs", rev = "7d9d88a8dfec2ddedc647b7a8f6c1e5b3e6c6ec0" }
+
+# Optimize Servo's style and layout crates even in dev builds to shrink
+# recursive stack frames and improve rendering performance.
+[profile.dev.package.stylo]
+opt-level = 2
+
+[profile.dev.package.servo-layout]
+opt-level = 2

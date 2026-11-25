@@ -1,21 +1,35 @@
-use nservo::app::{App, GuiWindow};
-use nservo::platform::ConfigPaths;
+use glib::ExitCode;
+use gtk::prelude::*;
+use gtk::{Application, glib};
 
-fn main() -> nservo::Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "--version" || a == "-v") {
-        println!("NServo 0.1.0 (Servo engine, wgpu/WebRender, Graphical GUI)");
-        return Ok(());
+const APP_ID: &str = "dev.nservo.Browser";
+
+const LOGGER: glib::GlibLogger = glib::GlibLogger::new(
+    glib::GlibLoggerFormat::Plain,
+    glib::GlibLoggerDomain::CrateTarget,
+);
+
+fn main() -> ExitCode {
+    // Must be the very first call in main(): servo-gtk re-executes this
+    // binary as its Servo rendering subprocess.
+    servo_gtk::run_as_runner_if_requested();
+
+    let _ = log::set_logger(&LOGGER);
+    log::set_max_level(log::LevelFilter::Info);
+
+    if let Err(err) = nservo::engine::epoxy::init() {
+        eprintln!("Failed to initialize OpenGL loader: {err}");
+        return ExitCode::FAILURE;
     }
 
-    let paths = ConfigPaths::new();
-    let mut app = App::new(paths)?;
+    let initial_url = std::env::args().nth(1);
+    let app = Application::builder().application_id(APP_ID).build();
 
-    // If a URL was passed on the command line, open it in active/new tab
-    if args.len() > 1 && !args[1].starts_with('-') {
-        let _ = app.tabs.open_tab(&args[1]);
-    }
+    app.connect_activate(move |app| {
+        nservo::ui::style::install_theme();
+        let start_url = initial_url.as_deref();
+        nservo::ui::window::BrowserWindow::open(app, start_url);
+    });
 
-    // Launch in native graphical desktop window
-    GuiWindow::run(app)
+    app.run()
 }
