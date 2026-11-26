@@ -44,13 +44,17 @@ pub enum BrowserAction {
     OpenInCurrentTab(String),
     OpenInNewTab(String),
     CloseTab,
+    ReopenClosedTab,
 
-    /// Page navigation and zoom actions.
+    /// Page navigation, zoom, and built-in inspector actions.
     Reload,
     GoBack,
     GoForward,
     SetZoom(f64),
+    ZoomIn,
+    ZoomOut,
     ShowHelp,
+    ToggleInspector,
 
     /// Session persistence actions.
     SaveSession(String),
@@ -59,4 +63,13 @@ pub enum BrowserAction {
 
     /// Exit the browser application.
     Quit,
+}
+
+/// Default zoom increment/decrement step (`10%`) for `Ctrl++` and `Ctrl+-`.
+pub const ZOOM_STEP: f64 = 0.1;
+
+/// Adjust `current` zoom by `delta`, rounding cleanly to 1% steps within `0.1..=10.0`.
+pub fn step_zoom(current: f64, delta: f64) -> f64 {
+    let next = ((current + delta) * 100.0).round() / 100.0;
+    next.clamp(0.1, 10.0)
 }

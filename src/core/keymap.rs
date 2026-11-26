@@ -85,12 +85,12 @@ impl KeyMapper {
 
         match input {
             KeyInput::Escape => KeyOutcome::Consumed,
-            KeyInput::Char('g') => {
+            KeyInput::Char(prefix @ ('g' | 'w')) => {
                 self.pending = Some(PendingPrefix {
-                    key: 'g',
+                    key: prefix,
                     started_at: now,
                 });
-                KeyOutcome::Pending("g".to_string())
+                KeyOutcome::Pending(prefix.to_string())
             }
             KeyInput::Char('j') => KeyOutcome::Action(BrowserAction::ScrollDown),
             KeyInput::Char('k') => KeyOutcome::Action(BrowserAction::ScrollUp),
@@ -100,6 +100,7 @@ impl KeyMapper {
             KeyInput::Char('H') => KeyOutcome::Action(BrowserAction::GoBack),
             KeyInput::Char('L') => KeyOutcome::Action(BrowserAction::GoForward),
             KeyInput::Char('d') => KeyOutcome::Action(BrowserAction::CloseTab),
+            KeyInput::Char('u') => KeyOutcome::Action(BrowserAction::ReopenClosedTab),
             KeyInput::Char('o') => {
                 KeyOutcome::Action(BrowserAction::EnterCommandWith("open ".to_string()))
             }
@@ -120,6 +121,7 @@ impl KeyMapper {
             ('g', KeyInput::Char('T')) => KeyOutcome::Action(BrowserAction::PrevTab),
             ('g', KeyInput::Char('g')) => KeyOutcome::Action(BrowserAction::ScrollTop),
             ('g', KeyInput::Char('o')) => KeyOutcome::Action(BrowserAction::EditCurrentUrl),
+            ('w', KeyInput::Char('i')) => KeyOutcome::Action(BrowserAction::ToggleInspector),
             _ => KeyOutcome::Consumed,
         }
     }

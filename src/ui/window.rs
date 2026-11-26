@@ -3,10 +3,11 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 
-use crate::core::{Mode, parse_command};
+use crate::core::{ConsoleStore, Mode, parse_command};
 use crate::engine::gpu::{self, RenderBackend};
 use crate::ui::command_bar::CommandBar;
 use crate::ui::hint_controller::HintController;
+use crate::ui::inspector_panel::{InspectorCallbacks, InspectorPanel};
 use crate::ui::key_handler::{KeyCallbacks, KeyHandler};
 use crate::ui::session_controller::SessionController;
 use crate::ui::status_bar::{StatusBar, StatusSnapshot};
@@ -24,6 +25,9 @@ pub struct BrowserWindow {
     pub(super) window: gtk::ApplicationWindow,
     pub(super) tab_bar: TabBar,
     pub(super) tab_view: TabView,
+    pub(super) inspector: InspectorPanel,
+    pub(super) console_store: RefCell<ConsoleStore>,
+    pub(super) last_inspected_tab: Cell<Option<u64>>,
     pub(super) status_bar: StatusBar,
     pub(super) command_bar: CommandBar,
     pub(super) key_handler: KeyHandler,
@@ -71,8 +75,46 @@ impl BrowserWindow {
             })
         };
 
+        let inspector = {
+            let (s_eval, s_ref, s_sel, s_clr, s_cls) = (
+                controller_slot.clone(),
+                controller_slot.clone(),
+                controller_slot.clone(),
+                controller_slot.clone(),
+                controller_slot.clone(),
+            );
+            InspectorPanel::new(InspectorCallbacks {
+                on_eval_js: Rc::new(move |expr| {
+                    if let Some(ctrl) = get_ctrl(&s_eval) {
+                        ctrl.eval_inspector_js(&expr);
+                    }
+                }),
+                on_refresh_dom: Rc::new(move || {
+                    if let Some(ctrl) = get_ctrl(&s_ref) {
+                        ctrl.refresh_inspector_dom();
+                    }
+                }),
+                on_select_dom_node: Rc::new(move |idx| {
+                    if let Some(ctrl) = get_ctrl(&s_sel) {
+                        ctrl.inspect_dom_node(idx);
+                    }
+                }),
+                on_clear_console: Rc::new(move || {
+                    if let Some(ctrl) = get_ctrl(&s_clr) {
+                        ctrl.clear_active_console();
+                    }
+                }),
+                on_close: Rc::new(move || {
+                    if let Some(ctrl) = get_ctrl(&s_cls) {
+                        ctrl.set_inspector_open(false);
+                    }
+                }),
+            })
+        };
+
         let tab_view = {
-            let (s_ch, s_pop, s_hint, s_nav) = (
+            let (s_ch, s_pop, s_hint, s_ins, s_nav) = (
+                controller_slot.clone(),
                 controller_slot.clone(),
                 controller_slot.clone(),
                 controller_slot.clone(),
@@ -94,6 +136,11 @@ impl BrowserWindow {
                         ctrl.handle_hint_event(tab_id, event);
                     }
                 }),
+                on_inspector_event: Rc::new(move |tab_id, event| {
+                    if let Some(ctrl) = get_ctrl(&s_ins) {
+                        ctrl.handle_inspector_event(tab_id, event);
+                    }
+                }),
                 on_navigation: Rc::new(move |tab_id| {
                     if let Some(ctrl) = get_ctrl(&s_nav) {
                         ctrl.handle_navigation(tab_id);
@@ -102,9 +149,18 @@ impl BrowserWindow {
             })
         };
 
+        let content_paned = gtk::Paned::new(gtk::Orientation::Vertical);
+        content_paned.set_start_child(Some(tab_view.widget()));
+        content_paned.set_end_child(Some(inspector.widget()));
+        content_paned.set_resize_start_child(true);
+        content_paned.set_resize_end_child(false);
+        content_paned.set_shrink_start_child(false);
+        content_paned.set_shrink_end_child(false);
+        content_paned.set_vexpand(true);
+
         let layout = gtk::Box::new(gtk::Orientation::Vertical, 0);
         layout.append(tab_bar.widget());
-        layout.append(tab_view.widget());
+        layout.append(&content_paned);
         layout.append(status_bar.widget());
         layout.append(command_bar.widget());
         window.set_child(Some(&layout));
@@ -113,6 +169,9 @@ impl BrowserWindow {
             window: window.clone(),
             tab_bar,
             tab_view,
+            inspector,
+            console_store: RefCell::new(ConsoleStore::default()),
+            last_inspected_tab: Cell::new(None),
             status_bar,
             command_bar,
             key_handler,
@@ -149,6 +208,7 @@ impl BrowserWindow {
         let on_action_ctrl = self.clone();
         let on_pending_ctrl = self.clone();
         let cmd_bar = self.command_bar.clone();
+        let inspector = self.inspector.clone();
 
         self.key_handler.attach(
             &self.window,
@@ -158,6 +218,7 @@ impl BrowserWindow {
                     on_pending_ctrl.set_pending_display(pending);
                 }),
                 is_command_entry_empty: Rc::new(move || cmd_bar.is_entry_empty()),
+                is_inspector_focused: Rc::new(move || inspector.has_focus_within()),
             },
         );
     }
@@ -227,5 +288,6 @@ impl BrowserWindow {
             pending_keys: pending.as_deref(),
             render_backend: self.render_backend.get(),
         });
+        self.sync_inspector_for_active_tab(active_tab.map(|t| t.id));
     }
 }

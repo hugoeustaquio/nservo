@@ -6,17 +6,19 @@ use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 
-use crate::core::{
-    BrowserAction, KEY_SEQUENCE_TIMEOUT, KeyInput, KeyMapper, KeyOutcome, LineEdge, Mode,
-    WordDirection,
-};
+use crate::core::{BrowserAction, KEY_SEQUENCE_TIMEOUT, KeyMapper, KeyOutcome, Mode};
 use crate::ui::im_bridge::{ImBridge, ImOutcome};
+use crate::ui::key_chords::{
+    has_non_text_modifier, is_modifier_only, match_ctrl_editing_chord, match_word_motion,
+    match_zoom_chord, translate_key,
+};
 
 /// Callbacks connecting GTK key capture events to the browser window controller.
 pub struct KeyCallbacks {
     pub on_action: Rc<dyn Fn(BrowserAction)>,
     pub on_pending_changed: Rc<dyn Fn(Option<String>)>,
     pub is_command_entry_empty: Rc<dyn Fn() -> bool>,
+    pub is_inspector_focused: Rc<dyn Fn() -> bool>,
 }
 
 /// Bridges GTK4 Capture-phase key events and a 400ms `glib` timeout to [`KeyMapper`].
@@ -93,7 +95,23 @@ impl KeyHandler {
             return glib::Propagation::Proceed;
         }
 
+        // Global zoom chords: Ctrl++ / Ctrl+= (zoom in), Ctrl+- (zoom out), Ctrl+0 (reset).
+        if let Some(action) = match_zoom_chord(keyval, modifiers) {
+            (callbacks.on_action)(action);
+            return glib::Propagation::Stop;
+        }
+
         let current_mode = self.mode.get();
+
+        // When the built-in inspector drawer has keyboard focus, let it receive
+        // native GTK typing/editing; Esc returns focus to the page in Normal mode.
+        if (callbacks.is_inspector_focused)() {
+            if keyval == gdk::Key::Escape {
+                (callbacks.on_action)(BrowserAction::EnterMode(Mode::Normal));
+                return glib::Propagation::Stop;
+            }
+            return glib::Propagation::Proceed;
+        }
 
         // In Command mode, Backspace on an empty entry exits back to Normal mode.
         if current_mode == Mode::Command
@@ -186,99 +204,4 @@ impl KeyHandler {
     fn cancel_timer(&self) {
         self.timer_gen.set(self.timer_gen.get().wrapping_add(1));
     }
-}
-
-fn match_ctrl_editing_chord(
-    mode: Mode,
-    keyval: gdk::Key,
-    modifiers: gdk::ModifierType,
-) -> Option<BrowserAction> {
-    let has_ctrl = modifiers.contains(gdk::ModifierType::CONTROL_MASK);
-    let has_other = modifiers.intersects(
-        gdk::ModifierType::SHIFT_MASK
-            | gdk::ModifierType::ALT_MASK
-            | gdk::ModifierType::SUPER_MASK
-            | gdk::ModifierType::META_MASK,
-    );
-    if !has_ctrl || has_other {
-        return None;
-    }
-
-    match (mode, keyval) {
-        (Mode::Normal | Mode::Insert, gdk::Key::c | gdk::Key::C) => {
-            Some(BrowserAction::CopySelection)
-        }
-        (Mode::Insert, gdk::Key::x | gdk::Key::X) => Some(BrowserAction::CutSelection),
-        (Mode::Insert, gdk::Key::v | gdk::Key::V) => Some(BrowserAction::PasteClipboard),
-        (Mode::Insert, gdk::Key::a | gdk::Key::A) => {
-            Some(BrowserAction::MoveLineEdge(LineEdge::Start))
-        }
-        (Mode::Insert, gdk::Key::e | gdk::Key::E) => {
-            Some(BrowserAction::MoveLineEdge(LineEdge::End))
-        }
-        _ => None,
-    }
-}
-
-fn match_word_motion(keyval: gdk::Key, modifiers: gdk::ModifierType) -> Option<BrowserAction> {
-    let has_ctrl = modifiers.contains(gdk::ModifierType::CONTROL_MASK);
-    let has_other = modifiers.intersects(
-        gdk::ModifierType::ALT_MASK | gdk::ModifierType::SUPER_MASK | gdk::ModifierType::META_MASK,
-    );
-    if !has_ctrl || has_other {
-        return None;
-    }
-
-    let direction = match keyval {
-        gdk::Key::Left | gdk::Key::KP_Left => WordDirection::Left,
-        gdk::Key::Right | gdk::Key::KP_Right => WordDirection::Right,
-        _ => return None,
-    };
-    let select = modifiers.contains(gdk::ModifierType::SHIFT_MASK);
-    Some(BrowserAction::MoveWord { direction, select })
-}
-
-fn translate_key(keyval: gdk::Key) -> KeyInput {
-    if keyval == gdk::Key::Escape {
-        KeyInput::Escape
-    } else if keyval == gdk::Key::BackSpace {
-        KeyInput::Backspace
-    } else if keyval == gdk::Key::F5 {
-        KeyInput::Reload
-    } else if let Some(ch) = keyval.to_unicode() {
-        KeyInput::Char(ch)
-    } else {
-        KeyInput::Other
-    }
-}
-
-fn has_non_text_modifier(modifiers: gdk::ModifierType) -> bool {
-    modifiers.intersects(
-        gdk::ModifierType::CONTROL_MASK
-            | gdk::ModifierType::ALT_MASK
-            | gdk::ModifierType::SUPER_MASK
-            | gdk::ModifierType::META_MASK,
-    )
-}
-
-fn is_modifier_only(keyval: gdk::Key) -> bool {
-    matches!(
-        keyval,
-        gdk::Key::Shift_L
-            | gdk::Key::Shift_R
-            | gdk::Key::Control_L
-            | gdk::Key::Control_R
-            | gdk::Key::Alt_L
-            | gdk::Key::Alt_R
-            | gdk::Key::Meta_L
-            | gdk::Key::Meta_R
-            | gdk::Key::Super_L
-            | gdk::Key::Super_R
-            | gdk::Key::Hyper_L
-            | gdk::Key::Hyper_R
-            | gdk::Key::Caps_Lock
-            | gdk::Key::Num_Lock
-            | gdk::Key::ISO_Level3_Shift
-            | gdk::Key::ISO_Level5_Shift
-    )
 }

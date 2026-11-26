@@ -55,3 +55,35 @@ fn metadata_updates_reflect_in_display_title() {
     assert_eq!(tab.display_title(), "Example Domain");
     assert!(tab.is_loading);
 }
+
+#[test]
+fn closed_tabs_can_be_reopened_in_lifo_order_at_previous_index() {
+    let mut model = TabModel::new();
+    let _first = model.add_tab("https://one.test", "One");
+    let _second = model.add_tab("https://two.test", "Two");
+    let _third = model.add_tab("https://three.test", "Three");
+
+    // Close middle tab (index 1), then last tab (new index 1).
+    model.select_index(1);
+    assert!(model.close_active().is_some());
+    assert!(model.close_active().is_some());
+    assert_eq!(model.len(), 1);
+
+    let last = model.pop_closed().expect("last closed tab");
+    assert_eq!(last.url, "https://three.test");
+    assert_eq!(last.title, "Three");
+    assert_eq!(last.index, 1);
+    model.insert_tab_at(last.index, last.url, last.title);
+
+    let prev = model.pop_closed().expect("previous closed tab");
+    assert_eq!(prev.url, "https://two.test");
+    assert_eq!(prev.index, 1);
+    model.insert_tab_at(prev.index, prev.url, prev.title);
+
+    let urls: Vec<&str> = model.tabs().iter().map(|t| t.url.as_str()).collect();
+    assert_eq!(
+        urls,
+        vec!["https://one.test", "https://two.test", "https://three.test"]
+    );
+    assert_eq!(model.pop_closed(), None);
+}

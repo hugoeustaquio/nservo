@@ -13,6 +13,10 @@ libloading = "0.9"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Unify Servo's `media-gstreamer` feature so servo-gtk initializes Servo's
+# built-in GStreamer backend (HTML5 <video>/<audio>/MSE/WebAudio) without
+# modifying upstream servo-gtk.
+servo = { git = "https://github.com/servo/servo.git", rev = "aac43a3f31a259f04a574f5ec4e959c943ad7cc7", default-features = false, features = ["media-gstreamer"] }
 servo-gtk = { git = "https://github.com/nacho/servo-gtk" }
 
 [patch.crates-io]

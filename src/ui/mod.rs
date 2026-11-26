@@ -1,11 +1,16 @@
 pub mod command_bar;
 pub mod hint_controller;
 pub mod im_bridge;
+pub mod inspector_panel;
+mod inspector_views;
+mod key_chords;
 pub mod key_handler;
+mod page_overlay;
 pub mod session_controller;
 pub mod status_bar;
 pub mod style;
 pub mod tab_bar;
+mod tab_signals;
 pub mod tab_view;
 pub mod window;
 mod window_actions;

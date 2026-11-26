@@ -3,19 +3,27 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use gtk::prelude::*;
-use servo_gtk::{LoadEvent, WebView};
+use servo_gtk::WebView;
 
-use crate::core::{HintEvent, Session, TabInfo, TabModel, parse_hint_message};
-use crate::engine::hints_js::HINT_MESSAGE_HANDLER;
+use crate::core::{HintEvent, InspectorEvent, Session, TabInfo, TabModel};
 use crate::engine::start_page;
 use crate::engine::web_tab::WebTab;
+use crate::ui::page_overlay::PageOverlay;
+use crate::ui::tab_signals::wire_tab_signals;
 
-/// Callbacks emitted when tab metadata changes, navigation occurs, popups open, or hints report.
+#[derive(Clone)]
+struct TabEntry {
+    tab: WebTab,
+    overlay: PageOverlay,
+}
+
+/// Callbacks emitted when tab metadata changes, navigation occurs, popups open, or page bridges report.
 #[derive(Clone)]
 pub struct TabViewCallbacks {
     pub on_state_changed: Rc<dyn Fn()>,
     pub on_popup_url: Rc<dyn Fn(String)>,
     pub on_hint_event: Rc<dyn Fn(u64, HintEvent)>,
+    pub on_inspector_event: Rc<dyn Fn(u64, InspectorEvent)>,
     pub on_navigation: Rc<dyn Fn(u64)>,
 }
 
@@ -24,7 +32,7 @@ pub struct TabViewCallbacks {
 pub struct TabView {
     stack: gtk::Stack,
     model: Rc<RefCell<TabModel>>,
-    tabs: Rc<RefCell<HashMap<u64, WebTab>>>,
+    tabs: Rc<RefCell<HashMap<u64, TabEntry>>>,
     callbacks: TabViewCallbacks,
 }
 
@@ -63,19 +71,19 @@ impl TabView {
             return false;
         }
 
-        let old_tabs: Vec<WebTab> = self.tabs.borrow_mut().drain().map(|(_, t)| t).collect();
-        for tab in old_tabs {
-            self.stack.remove(tab.view());
+        let old_tabs: Vec<TabEntry> = self.tabs.borrow_mut().drain().map(|(_, t)| t).collect();
+        for entry in old_tabs {
+            self.stack.remove(entry.overlay.widget());
         }
         *self.model.borrow_mut() = TabModel::new();
 
         for saved in &session.tabs {
-            let web_tab = if saved.url == "about:help" {
-                WebTab::new_html(start_page::HELP_PAGE_HTML)
+            let (url, web_tab) = if saved.url == "about:help" || saved.url.trim().is_empty() {
+                ("about:help", WebTab::new_html(start_page::HELP_PAGE_HTML))
             } else {
-                WebTab::new_url(&saved.url)
+                (saved.url.as_str(), WebTab::new_url(&saved.url))
             };
-            self.insert_tab(&saved.url, &saved.title, web_tab);
+            self.insert_tab(url, &saved.title, web_tab);
         }
 
         let target_idx = session.active_index.min(session.tabs.len() - 1);
@@ -140,9 +148,9 @@ impl TabView {
     /// Close the active tab. Returns `true` if tabs remain open, `false` if empty.
     pub fn close_active_tab(&self) -> bool {
         let removed_id = self.model.borrow_mut().close_active();
-        let removed_tab = removed_id.and_then(|id| self.tabs.borrow_mut().remove(&id));
-        if let Some(tab) = removed_tab {
-            self.stack.remove(tab.view());
+        let removed_entry = removed_id.and_then(|id| self.tabs.borrow_mut().remove(&id));
+        if let Some(entry) = removed_entry {
+            self.stack.remove(entry.overlay.widget());
         }
 
         if let Some(next_id) = self.active_tab_id() {
@@ -152,6 +160,22 @@ impl TabView {
             (self.callbacks.on_state_changed)();
             false
         }
+    }
+
+    /// Reopen the most recently closed tab at its previous position.
+    /// Returns `false` if there is no closed tab to restore.
+    pub fn reopen_closed_tab(&self) -> bool {
+        let Some(closed) = self.model.borrow_mut().pop_closed() else {
+            return false;
+        };
+        let web_tab = if closed.url == "about:help" || closed.url.is_empty() {
+            WebTab::new_html(start_page::HELP_PAGE_HTML)
+        } else {
+            WebTab::new_url(&closed.url)
+        };
+        let id = self.insert_tab_at(closed.index, &closed.url, &closed.title, web_tab);
+        self.activate_tab_id(id);
+        true
     }
 
     pub fn active_tab(&self) -> Option<WebTab> {
@@ -201,7 +225,7 @@ impl TabView {
     }
 
     fn tab_by_id(&self, id: u64) -> Option<WebTab> {
-        self.tabs.borrow().get(&id).cloned()
+        self.tabs.borrow().get(&id).map(|e| e.tab.clone())
     }
 
     fn activate_tab_id(&self, id: u64) {
@@ -215,83 +239,32 @@ impl TabView {
     }
 
     fn insert_tab(&self, url: &str, title: &str, web_tab: WebTab) -> u64 {
-        let id = self.model.borrow_mut().add_tab(url, title);
-        self.model.borrow_mut().set_loading(id, true);
-
-        self.wire_signals(id, &web_tab);
-        self.stack
-            .add_named(web_tab.view(), Some(&tab_stack_name(id)));
-        self.tabs.borrow_mut().insert(id, web_tab);
-        id
+        let end = self.model.borrow().len();
+        self.insert_tab_at(end, url, title, web_tab)
     }
 
-    fn wire_signals(&self, id: u64, web_tab: &WebTab) {
-        let view = web_tab.view();
+    fn insert_tab_at(&self, index: usize, url: &str, title: &str, web_tab: WebTab) -> u64 {
+        let id = self.model.borrow_mut().insert_tab_at(index, url, title);
+        self.model.borrow_mut().set_loading(id, true);
 
-        let (model, on_change, on_nav, tab) = (
-            self.model.clone(),
-            self.callbacks.on_state_changed.clone(),
-            self.callbacks.on_navigation.clone(),
-            web_tab.clone(),
+        let overlay = PageOverlay::new(&web_tab);
+        wire_tab_signals(
+            id,
+            &web_tab,
+            overlay.downgrade(),
+            &self.model,
+            &self.callbacks,
         );
-        view.connect_uri_notify(move |v| {
-            let Some(uri) = v.uri() else { return };
-            let ready = tab.is_ready();
-            if !ready && uri == "about:blank" {
-                return;
-            }
-            let changed = model.borrow_mut().update_url(id, uri);
-            on_change();
-            if ready && changed {
-                on_nav(id);
-            }
-        });
-
-        let (model, on_change) = (self.model.clone(), self.callbacks.on_state_changed.clone());
-        view.connect_title_notify(move |v| {
-            model
-                .borrow_mut()
-                .update_title(id, v.title().unwrap_or_default());
-            on_change();
-        });
-
-        let (model, on_change, on_nav, tab) = (
-            self.model.clone(),
-            self.callbacks.on_state_changed.clone(),
-            self.callbacks.on_navigation.clone(),
-            web_tab.clone(),
+        self.stack
+            .add_named(overlay.widget(), Some(&tab_stack_name(id)));
+        self.tabs.borrow_mut().insert(
+            id,
+            TabEntry {
+                tab: web_tab,
+                overlay,
+            },
         );
-        view.connect_load_changed(move |_, event| {
-            if matches!(event, LoadEvent::Finished) {
-                if tab.mark_ready_and_flush() {
-                    return;
-                }
-                tab.nudge_repaint();
-            }
-            let loading = matches!(event, LoadEvent::Started);
-            model.borrow_mut().set_loading(id, loading);
-            on_change();
-            if loading && tab.is_ready() {
-                on_nav(id);
-            }
-        });
-
-        let on_change = self.callbacks.on_state_changed.clone();
-        view.connect_zoom_level_notify(move |_| on_change());
-
-        let on_popup = self.callbacks.on_popup_url.clone();
-        view.connect_create_web_view(move |_, url| on_popup(url.to_string()));
-
-        let on_hint = self.callbacks.on_hint_event.clone();
-        web_tab
-            .user_content()
-            .connect_script_message_received(move |_, name, body| {
-                if name == HINT_MESSAGE_HANDLER
-                    && let Some(event) = parse_hint_message(body)
-                {
-                    on_hint(id, event);
-                }
-            });
+        id
     }
 }
 

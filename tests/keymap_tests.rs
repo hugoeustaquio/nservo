@@ -24,6 +24,10 @@ fn normal_mode_scroll_and_mode_switches() {
         KeyOutcome::Action(BrowserAction::CloseTab)
     );
     assert_eq!(
+        mapper.handle_key(Mode::Normal, KeyInput::Char('u'), now),
+        KeyOutcome::Action(BrowserAction::ReopenClosedTab)
+    );
+    assert_eq!(
         mapper.handle_key(Mode::Normal, KeyInput::Char('o'), now),
         KeyOutcome::Action(BrowserAction::EnterCommandWith("open ".to_string()))
     );
@@ -114,6 +118,20 @@ fn gg_and_go_trigger_within_timeout() {
             t1 + Duration::from_millis(200)
         ),
         KeyOutcome::Action(BrowserAction::EditCurrentUrl)
+    );
+
+    let t2 = t0 + Duration::from_millis(1200);
+    assert_eq!(
+        mapper.handle_key(Mode::Normal, KeyInput::Char('w'), t2),
+        KeyOutcome::Pending("w".to_string())
+    );
+    assert_eq!(
+        mapper.handle_key(
+            Mode::Normal,
+            KeyInput::Char('i'),
+            t2 + Duration::from_millis(150)
+        ),
+        KeyOutcome::Action(BrowserAction::ToggleInspector)
     );
 }
 

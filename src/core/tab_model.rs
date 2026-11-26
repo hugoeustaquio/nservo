@@ -1,3 +1,5 @@
+const MAX_CLOSED_TABS: usize = 50;
+
 /// Metadata tracked for each open browser tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TabInfo {
@@ -5,6 +7,14 @@ pub struct TabInfo {
     pub url: String,
     pub title: String,
     pub is_loading: bool,
+}
+
+/// Snapshot of a recently closed tab so it can be reopened with `u`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClosedTab {
+    pub url: String,
+    pub title: String,
+    pub index: usize,
 }
 
 impl TabInfo {
@@ -23,6 +33,7 @@ impl TabInfo {
 #[derive(Debug, Default)]
 pub struct TabModel {
     tabs: Vec<TabInfo>,
+    closed: Vec<ClosedTab>,
     active: usize,
     next_id: u64,
 }
@@ -31,6 +42,7 @@ impl TabModel {
     pub fn new() -> Self {
         Self {
             tabs: Vec::new(),
+            closed: Vec::new(),
             active: 0,
             next_id: 1,
         }
@@ -56,17 +68,31 @@ impl TabModel {
         self.tabs.get(self.active)
     }
 
-    /// Add a new tab and make it active, returning its unique tab ID.
+    /// Add a new tab at the end and make it active, returning its unique tab ID.
     pub fn add_tab(&mut self, url: impl Into<String>, title: impl Into<String>) -> u64 {
+        self.insert_tab_at(self.tabs.len(), url, title)
+    }
+
+    /// Insert a tab at `index` (clamped to bounds) and make it active.
+    pub fn insert_tab_at(
+        &mut self,
+        index: usize,
+        url: impl Into<String>,
+        title: impl Into<String>,
+    ) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
-        self.tabs.push(TabInfo {
-            id,
-            url: url.into(),
-            title: title.into(),
-            is_loading: false,
-        });
-        self.active = self.tabs.len() - 1;
+        let pos = index.min(self.tabs.len());
+        self.tabs.insert(
+            pos,
+            TabInfo {
+                id,
+                url: url.into(),
+                title: title.into(),
+                is_loading: false,
+            },
+        );
+        self.active = pos;
         id
     }
 
@@ -102,16 +128,30 @@ impl TabModel {
         Some(self.tabs[self.active].id)
     }
 
-    /// Close the currently active tab and return its removed ID.
+    /// Close the currently active tab, recording it on the undo stack, and return its ID.
     pub fn close_active(&mut self) -> Option<u64> {
         if self.tabs.is_empty() {
             return None;
         }
-        let removed = self.tabs.remove(self.active);
+        let closed_idx = self.active;
+        let removed = self.tabs.remove(closed_idx);
+        if self.closed.len() >= MAX_CLOSED_TABS {
+            self.closed.remove(0);
+        }
+        self.closed.push(ClosedTab {
+            url: removed.url,
+            title: removed.title,
+            index: closed_idx,
+        });
         if self.active >= self.tabs.len() && !self.tabs.is_empty() {
             self.active = self.tabs.len() - 1;
         }
         Some(removed.id)
+    }
+
+    /// Pop the most recently closed tab (LIFO) for reopening with `u`.
+    pub fn pop_closed(&mut self) -> Option<ClosedTab> {
+        self.closed.pop()
     }
 
     /// Update a tab's URL, returning `true` if the URL actually changed.

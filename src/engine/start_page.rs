@@ -45,23 +45,27 @@ pub const HELP_PAGE_HTML: &str = r#"<!DOCTYPE html>
     <tr><td>gg / G</td><td>Scroll to top / scroll to bottom</td></tr>
     <tr><td>gt / gT</td><td>Next tab / previous tab (400ms sequence window)</td></tr>
     <tr><td>go</td><td>Edit current page URL in Command mode (<code>:open &lt;URL&gt;</code>)</td></tr>
+    <tr><td>wi</td><td>Toggle built-in Web Inspector (JS Console/REPL &amp; DOM Inspector)</td></tr>
     <tr><td>f</td><td>Show letter hints on links, buttons, and inputs</td></tr>
     <tr><td>d</td><td>Close current tab</td></tr>
+    <tr><td>u</td><td>Reopen last closed tab</td></tr>
     <tr><td>o / O</td><td>Open Command mode pre-filled with <code>:open </code> / <code>:Open </code></td></tr>
     <tr><td>H / L</td><td>Go back / go forward in history</td></tr>
     <tr><td>r</td><td>Reload current tab</td></tr>
+    <tr><td>Ctrl++ / Ctrl+- / Ctrl+0</td><td>Zoom in / zoom out / reset zoom</td></tr>
     <tr><td>i</td><td>Enter INSERT mode</td></tr>
     <tr><td>:</td><td>Enter COMMAND mode</td></tr>
   </table>
 
   <h2>Commands</h2>
   <table>
-    <tr><td>:open &lt;URL&gt;</td><td>Open URL in the current tab (alias: <code>:o</code>)</td></tr>
-    <tr><td>:Open &lt;URL&gt;</td><td>Open URL in a new tab (aliases: <code>:O</code>, <code>:tabopen</code>)</td></tr>
+    <tr><td>:open &lt;URL|query&gt;</td><td>Open URL or Google Search in the current tab (alias: <code>:o</code>)</td></tr>
+    <tr><td>:Open &lt;URL|query&gt;</td><td>Open URL or Google Search in a new tab (aliases: <code>:O</code>, <code>:tabopen</code>)</td></tr>
     <tr><td>:tabnext / :tabprev</td><td>Switch to next / previous tab</td></tr>
     <tr><td>:tabclose</td><td>Close current tab (aliases: <code>:tc</code>, <code>:bd</code>)</td></tr>
     <tr><td>:reload / :back / :forward</td><td>Page navigation controls</td></tr>
     <tr><td>:zoom &lt;factor|reset&gt;</td><td>Set page zoom level (e.g. <code>:zoom 1.25</code>)</td></tr>
+    <tr><td>:inspect</td><td>Toggle built-in JS Console &amp; DOM Inspector (shortcut: <code>wi</code>)</td></tr>
     <tr><td>:w [name]</td><td>Save current tabs as session (defaults to <code>default</code>)</td></tr>
     <tr><td>:wq [name]</td><td>Save session and quit</td></tr>
     <tr><td>:session &lt;name&gt;</td><td>Restore a saved session by name</td></tr>

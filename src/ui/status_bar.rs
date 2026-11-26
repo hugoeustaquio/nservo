@@ -82,7 +82,7 @@ impl StatusBar {
         let zoom_pct = (snapshot.zoom_level * 100.0).round() as i32;
         let backend = snapshot.render_backend.short_label();
         self.meta_label
-            .set_text(&format!("TAB {tab_pos}  |  {zoom_pct}%  |  {backend}"));
+            .set_text(&format!("TAB {tab_pos}  |  ZOOM {zoom_pct}%  |  {backend}"));
     }
 
     pub fn show_notice(&self, text: &str) {
