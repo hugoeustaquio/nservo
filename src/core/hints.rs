@@ -37,6 +37,7 @@ pub fn generate_hint_labels(count: usize) -> Vec<String> {
 pub enum HintEvent {
     Shown { count: usize },
     Activated { is_input: bool },
+    OpenInNewTab { url: String },
     Cancelled,
     Empty,
 }
@@ -48,6 +49,8 @@ struct RawHintMessage {
     count: usize,
     #[serde(default, rename = "isInput")]
     is_input: bool,
+    #[serde(default)]
+    url: String,
 }
 
 /// Parse a JSON message payload sent from page JavaScript via `nservoHints`.
@@ -58,6 +61,16 @@ pub fn parse_hint_message(body: &str) -> Option<HintEvent> {
         "activated" => Some(HintEvent::Activated {
             is_input: raw.is_input,
         }),
+        "open_new_tab" => {
+            let url = raw.url.trim();
+            if url.is_empty() {
+                None
+            } else {
+                Some(HintEvent::OpenInNewTab {
+                    url: url.to_string(),
+                })
+            }
+        }
         "cancelled" => Some(HintEvent::Cancelled),
         "empty" => Some(HintEvent::Empty),
         _ => None,

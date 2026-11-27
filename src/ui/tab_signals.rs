@@ -3,10 +3,14 @@ use std::rc::Rc;
 
 use servo_gtk::LoadEvent;
 
-use crate::core::{TabModel, parse_hint_message, parse_inspector_message, parse_scroll_metrics};
+use crate::core::{
+    HistorySync, TabModel, parse_hint_message, parse_inspector_message, parse_scroll_metrics,
+    parse_search_message,
+};
 use crate::engine::hints_js::HINT_MESSAGE_HANDLER;
 use crate::engine::inspector_js::INSPECTOR_MESSAGE_HANDLER;
 use crate::engine::scroll::SCROLL_MESSAGE_HANDLER;
+use crate::engine::search_js::SEARCH_MESSAGE_HANDLER;
 use crate::engine::web_tab::WebTab;
 use crate::ui::page_overlay::WeakPageOverlay;
 use crate::ui::tab_view::TabViewCallbacks;
@@ -21,10 +25,11 @@ pub(super) fn wire_tab_signals(
 ) {
     let view = web_tab.view();
 
-    let (m, on_change, on_nav, tab_weak) = (
+    let (m, on_change, on_nav, on_hist, tab_weak) = (
         model.clone(),
         callbacks.on_state_changed.clone(),
         callbacks.on_navigation.clone(),
+        callbacks.on_history_sync.clone(),
         web_tab.downgrade(),
     );
     view.connect_uri_notify(move |v| {
@@ -35,6 +40,11 @@ pub(super) fn wire_tab_signals(
         if !tab.accept_uri_change(&uri) {
             return;
         }
+        let title = v.title().unwrap_or_default();
+        on_hist(HistorySync::Visit {
+            url: uri.clone(),
+            title,
+        });
         let changed = m.borrow_mut().update_url(id, uri);
         on_change();
         if tab.is_ready() && changed {
@@ -42,17 +52,28 @@ pub(super) fn wire_tab_signals(
         }
     });
 
-    let (m, on_change) = (model.clone(), callbacks.on_state_changed.clone());
+    let (m, on_change, on_hist) = (
+        model.clone(),
+        callbacks.on_state_changed.clone(),
+        callbacks.on_history_sync.clone(),
+    );
     view.connect_title_notify(move |v| {
-        m.borrow_mut()
-            .update_title(id, v.title().unwrap_or_default());
+        let title = v.title().unwrap_or_default();
+        if let Some(url) = v.uri() {
+            on_hist(HistorySync::Title {
+                url,
+                title: title.clone(),
+            });
+        }
+        m.borrow_mut().update_title(id, title);
         on_change();
     });
 
-    let (m, on_change, on_nav, tab_weak) = (
+    let (m, on_change, on_nav, on_hist, tab_weak) = (
         model.clone(),
         callbacks.on_state_changed.clone(),
         callbacks.on_navigation.clone(),
+        callbacks.on_history_sync.clone(),
         web_tab.downgrade(),
     );
     view.connect_load_changed(move |v, event| {
@@ -62,6 +83,12 @@ pub(super) fn wire_tab_signals(
         if matches!(event, LoadEvent::Finished) {
             if tab.on_load_finished(v.uri().as_deref()) {
                 return;
+            }
+            if let Some(url) = v.uri() {
+                on_hist(HistorySync::Visit {
+                    url,
+                    title: v.title().unwrap_or_default(),
+                });
             }
             tab.nudge_repaint();
         }
@@ -81,6 +108,7 @@ pub(super) fn wire_tab_signals(
 
     let on_hint = callbacks.on_hint_event.clone();
     let on_inspector = callbacks.on_inspector_event.clone();
+    let on_search = callbacks.on_search_event.clone();
     web_tab
         .user_content()
         .connect_script_message_received(move |_, name, body| {
@@ -92,6 +120,10 @@ pub(super) fn wire_tab_signals(
                 && let Some(event) = parse_inspector_message(body)
             {
                 on_inspector(id, event);
+            } else if name == SEARCH_MESSAGE_HANDLER
+                && let Some(event) = parse_search_message(body)
+            {
+                on_search(id, event);
             } else if name == SCROLL_MESSAGE_HANDLER
                 && let Some(metrics) = parse_scroll_metrics(body)
             {

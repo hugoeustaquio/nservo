@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use gtk::prelude::*;
@@ -10,6 +11,7 @@ const MAX_TAB_TITLE_CHARS: usize = 28;
 #[derive(Clone)]
 pub struct TabBar {
     container: gtk::Box,
+    buttons: Rc<RefCell<Vec<gtk::Button>>>,
     on_select: Rc<dyn Fn(usize)>,
 }
 
@@ -21,6 +23,7 @@ impl TabBar {
 
         Self {
             container,
+            buttons: Rc::new(RefCell::new(Vec::new())),
             on_select: Rc::new(on_select),
         }
     }
@@ -29,25 +32,40 @@ impl TabBar {
         &self.container
     }
 
-    /// Re-render tab pills to reflect current titles, loading states, and active tab.
+    /// Update tab pills in place to avoid tearing down and recreating GTK widgets
+    /// on every title, loading, or mode change.
     pub fn render(&self, tabs: &[TabInfo], active_index: usize) {
-        while let Some(child) = self.container.first_child() {
-            self.container.remove(&child);
+        let mut buttons = self.buttons.borrow_mut();
+
+        while buttons.len() > tabs.len() {
+            if let Some(btn) = buttons.pop() {
+                self.container.remove(&btn);
+            }
         }
 
-        for (idx, tab) in tabs.iter().enumerate() {
-            let label = format_tab_label(idx, tab);
-            let button = gtk::Button::with_label(&label);
+        while buttons.len() < tabs.len() {
+            let idx = buttons.len();
+            let button = gtk::Button::new();
             button.add_css_class("tab-button");
             button.set_can_focus(false);
-            if idx == active_index {
-                button.add_css_class("tab-active");
-            }
-
             let on_select = self.on_select.clone();
             button.connect_clicked(move |_| on_select(idx));
-
             self.container.append(&button);
+            buttons.push(button);
+        }
+
+        for (idx, (button, tab)) in buttons.iter().zip(tabs.iter()).enumerate() {
+            let label = format_tab_label(idx, tab);
+            if button.label().as_deref() != Some(label.as_str()) {
+                button.set_label(&label);
+            }
+            let is_active = idx == active_index;
+            let has_active = button.has_css_class("tab-active");
+            if is_active && !has_active {
+                button.add_css_class("tab-active");
+            } else if !is_active && has_active {
+                button.remove_css_class("tab-active");
+            }
         }
     }
 }

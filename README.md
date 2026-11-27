@@ -1,0 +1,176 @@
+# nservo
+
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-2024%20edition-orange.svg)](https://www.rust-lang.org/)
+[![Engine: Servo](https://img.shields.io/badge/Engine-Servo%20(servo--gtk)-teal.svg)](https://github.com/nacho/servo-gtk)
+[![UI: GTK4](https://img.shields.io/badge/UI-GTK4-4a86cf.svg)](https://gtk.org/)
+
+A fast, keyboard-driven web browser written in Rust with Vim/Neovim modal interaction, heavily inspired by [qutebrowser](https://qutebrowser.org/) and powered by [Servo](https://servo.org/) via [`servo-gtk`](https://github.com/nacho/servo-gtk) and GTK4.
+
+---
+
+## Features
+
+- **Modal Vim-style browsing:** Distinct `NORMAL`, `INSERT`, `COMMAND`, `SEARCH`, and `HINT` modes with GTK4 Capture-phase key interception so shortcuts never leak into pages.
+- **In-page Vim search (`/`):** Smartcase search with match highlighting, automatic scroll-to-match, wrapping `n` / `N` navigation, and `Esc` / `:noh` highlight clearing.
+- **Link hinting (`f`):** Prefix-free alphabetic overlays (`a`–`z`, `aa`–`zz`) to click links, buttons, and focus inputs entirely from the keyboard. Focusing an input automatically switches to `INSERT` mode.
+- **Smooth scrolling & clean chrome:** `requestAnimationFrame`-eased scrolling (`j`/`k`/`h`/`l`, `gg`/`G`, and mouse wheel) paired with auto-hiding, hover-expanding GTK4 overlay scrollbars and a dark Tokyo Night-inspired interface.
+- **Tabs, bookmarks, history & sessions (SQLite):** Numbered tabline, wrap-around switching (`gt`/`gT`), undo closed tabs (`u`), quick bookmarking (`b` / `B`), automatic browsing history (`gh` / `:history`), and named sessions (`:w`, `:wq`, `:session`) with automatic `default` restore—all persisted in a single SQLite database at `$XDG_CONFIG_HOME/nservo/nservo.db`.
+- **Smart command bar (`:`):** Ex-style commands with automatic URL normalization (explicit schemes, `localhost`, IPv4/IPv6, bare domains) and Google Search fallback for plain text queries.
+- **Built-in Web Inspector (`wi` / `:inspect`):** Docked GTK4 developer drawer with a per-tab JavaScript Console/REPL (with `Up`/`Down` history) and a live DOM tree + computed-style inspector with element highlighting.
+- **Native HTML5 media:** Enables Servo's GStreamer backend (`media-gstreamer`) for `<video>`, `<audio>`, MSE, and WebAudio playback.
+- **GPU-first rendering with CPU fallback:** Automatically detects Linux DRM render nodes (`/dev/dri/renderD*`), prefers hardware Vulkan/GL via GTK4, falls back cleanly to Cairo on CPU-only environments, and displays the active backend in the statusline.
+- **Full Unicode, IME & clipboard support:** Bridges GTK4's `IMMulticontext` and a built-in dead-key composer so diacritics, accents, Compose sequences, and supplementary Unicode characters work cleanly in `INSERT` mode alongside `Ctrl+C`/`X`/`V`, `Ctrl+A`/`E`, and `Ctrl[+Shift]+Arrow`.
+
+---
+
+## Requirements
+
+- **Linux** (Wayland or X11)
+- **Rust** toolchain supporting the **2024 edition** (`rustc` 1.85+)
+- **GTK 4** (`>= 4.12`) development headers (`gtk4`)
+- **libepoxy** (`libepoxy.so.0`)
+- **GStreamer** development libraries and plugins (for Servo's `media-gstreamer` HTML5 audio/video backend)
+- Standard **Servo** build dependencies (`pkg-config`, `clang`/LLVM, `cmake`, `python3`, etc.)
+
+---
+
+## Building & Running
+
+```bash
+git clone https://github.com/hugoeustaquio/nservo.git
+cd nservo
+
+# Build in release mode (recommended for browsing performance)
+cargo build --release
+
+# Launch (restores the 'default' session if saved, otherwise opens the built-in help page)
+cargo run --release
+
+# Launch directly to a URL or search query
+cargo run --release -- https://servo.org
+```
+
+> **Note:** The first build compiles `servo` and `servo-gtk` from Git and may take a while. Development builds automatically apply `opt-level = 2` to Servo's rendering crates (`Cargo.toml`) and increase Stylo's thread stack size via `.cargo/config.toml`.
+>
+> You can override the GTK4 render backend explicitly with `GSK_RENDERER` (for example `GSK_RENDERER=vulkan`, `GSK_RENDERER=gl`, or `GSK_RENDERER=cairo`).
+
+---
+
+## Modes
+
+| Mode | How to Enter | Behavior |
+| :--- | :--- | :--- |
+| **NORMAL** | Default (`Esc` from any mode) | Keyboard navigation, scrolling, tab management, and multi-key sequences (`400ms` window). |
+| **INSERT** | `i` (or activating a text input via `f`) | Sends keystrokes directly to the web page with IME/dead-key and clipboard support. Returns to `NORMAL` on `Esc` or page navigation. |
+| **COMMAND** | `:`, `o`, `O`, or `go` | Shows the bottom `:` Ex-style command prompt. `Esc` or `BackSpace` on an empty prompt returns to `NORMAL`. |
+| **SEARCH** | `/` | Shows the bottom `/` in-page search prompt (smartcase). Press `Enter` to highlight matches and jump to the first hit (empty `Enter` repeats the last search); `Esc` or empty `BackSpace` cancels. |
+| **HINT** | `f` | Overlays clickable elements with letter badges. Type letters to filter/activate, `BackSpace` to undo, `Esc` to cancel. |
+
+---
+
+## Keybindings
+
+### Normal Mode
+
+| Key | Action |
+| :--- | :--- |
+| `[count]j` / `[count]k` | Smooth scroll down / up (optional numeric count, e.g. `12j`) |
+| `[count]h` / `[count]l` | Smooth scroll left / right (optional numeric count, e.g. `5l`) |
+| `gg` / `G` | Smooth scroll to top / bottom |
+| `f` / `F` | Enter **HINT** mode (`f` follow links/inputs in current tab, `F` open link in new tab) |
+| `/` | Enter **SEARCH** mode (in-page smartcase search) |
+| `n` / `N` | Jump to next / previous search match (wraps around) |
+| `Esc` | Clear active search highlights |
+| `b` / `B` | Add current page to bookmarks / open `about:bookmarks` |
+| `o` / `O` | Open command bar pre-filled with `:open ` (current tab) / `:Open ` (new tab) |
+| `go` | Edit current tab's URL in command bar (`:open <current URL>`) |
+| `gh` | Open browsing history (`about:history`) |
+| `gt` / `gT` | Next tab / previous tab |
+| `d` | Close current tab (closes window if last tab) |
+| `u` | Reopen most recently closed tab at its previous position |
+| `H` / `L` | History back / forward |
+| `r` / `F5` | Reload current tab |
+| `wi` | Toggle built-in Web Inspector (JS Console/REPL & DOM Inspector) |
+| `i` | Enter **INSERT** mode |
+| `:` | Enter **COMMAND** mode |
+| `Ctrl+C` | Copy selected text to the system clipboard |
+
+### Global & Insert Mode Chords
+
+| Key | Scope | Action |
+| :--- | :--- | :--- |
+| `Ctrl++` / `Ctrl+=` | Global | Zoom in (`+10%`) |
+| `Ctrl+-` | Global | Zoom out (`-10%`) |
+| `Ctrl+0` | Global | Reset zoom to `100%` |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | Insert (`Ctrl+C` also in Normal) | Copy / cut / paste via system clipboard |
+| `Ctrl+Left` / `Ctrl+Right` | Insert | Move cursor by one word |
+| `Ctrl+Shift+Left` / `Ctrl+Shift+Right` | Insert | Extend selection by one word |
+| `Ctrl+A` / `Ctrl+E` | Insert | Move cursor to start / end of line |
+| `Esc` | Any mode / Inspector | Return to **NORMAL** mode and focus the page |
+
+---
+
+## Commands
+
+Press `:` to open the command bar and run Ex-style commands:
+
+| Command | Aliases | Description |
+| :--- | :--- | :--- |
+| `:open <URL\|query>` | `:o` | Open a URL or Google Search in the current tab |
+| `:Open <URL\|query>` | `:O`, `:tabopen`, `:tabnew` | Open a URL or Google Search in a new tab |
+| `:tabnext` | `:tabn` | Switch to the next tab |
+| `:tabprev` | `:tabp`, `:tabprevious` | Switch to the previous tab |
+| `:tabclose` | `:tabc`, `:tc`, `:bd`, `:close` | Close the current tab |
+| `:reload` | `:r` | Reload the current tab |
+| `:back` | — | Navigate back in history |
+| `:forward` | — | Navigate forward in history |
+| `:zoom <factor\|reset>` | — | Set zoom level (`0.1`–`10.0`, e.g. `:zoom 1.25`) or `reset` |
+| `:inspect` | `:inspector`, `:devtools` | Toggle the built-in Web Inspector |
+| `:noh` | `:nohlsearch` | Clear active in-page search highlights |
+| `:w [name]` | `:write [name]` | Save open tabs as a session (defaults to `default`) |
+| `:wq [name]` | — | Save session and quit |
+| `:session <name>` | — | Restore a saved session |
+| `:bookmark` | `:bm-add` | Add the current page to bookmarks (shortcut: `b`) |
+| `:bookmarks` | `:bm` | Open saved bookmarks (`about:bookmarks`, shortcut: `B`) |
+| `:bmdel [index\|URL]` | `:bookmark-del` | Remove a bookmark by 1-based index, URL, or the current page |
+| `:history [query]` | `:hist` | Show recent browsing history or filter by substring (shortcut: `gh`) |
+| `:history-clear` | `:histclear` | Clear all saved browsing history |
+| `:help` | `:h` | Open the built-in keyboard & command reference page |
+| `:q` | `:quit`, `:qa` | Quit `nservo` |
+
+### SQLite Persistence (Sessions, Bookmarks & History)
+
+All browser state is persisted in a single SQLite database (WAL mode) under `$XDG_CONFIG_HOME/nservo/nservo.db` (falling back to `$HOME/.config/nservo/nservo.db`):
+
+- **Sessions (`sessions`, `session_tabs`):** Named tab sessions saved with `:w` / `:wq` and restored with `:session`. Session names may contain ASCII letters, digits, `-`, and `_`. If a `default` session exists and no CLI URL is passed, `nservo` restores it automatically on startup.
+- **Bookmarks (`bookmarks`):** Deduplicated URLs and titles managed via `b`, `B`, `:bookmark`, `:bookmarks`, and `:bmdel`.
+- **History (`history`):** Automatically recorded on navigation (skipping internal `about:` and `data:` pages), browsable and searchable via `gh` or `:history [query]`.
+
+---
+
+## Architecture & Testing
+
+`nservo` separates pure browser logic (`src/core`), Servo integration (`src/engine`), and GTK4 UI (`src/ui`) so all core behavior is deterministically testable without a display server. Every `.rs` file is kept at `<= 300` lines, and both modularity and layer isolation are enforced automatically by the test suite.
+
+See [architecture.md](architecture.md) for the full module map, component diagram, and input flow.
+
+Run the test suite:
+
+```bash
+cargo test
+```
+
+---
+
+## Inspiration & Acknowledgements
+
+- [qutebrowser](https://qutebrowser.org/) — primary inspiration for keyboard-first modal web browsing, hint overlays, and command workflows.
+- [Vim](https://www.vim.org/) / [Neovim](https://neovim.io/) — modal editing philosophy, Ex commands, and statusline/tabline aesthetics.
+- [Servo](https://servo.org/) and [`servo-gtk`](https://github.com/nacho/servo-gtk) — the Rust web rendering engine and GTK4 embedding layer powering `nservo`.
+
+---
+
+## License
+
+`nservo` is licensed under the **BSD 3-Clause License**. See [LICENSE](LICENSE) for details.

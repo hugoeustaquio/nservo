@@ -54,10 +54,20 @@ pub fn parse_command(raw: &str) -> Result<BrowserAction, CommandError> {
         "forward" => Ok(BrowserAction::GoForward),
         "zoom" => parse_zoom_arg(rest),
         "inspect" | "inspector" | "devtools" => Ok(BrowserAction::ToggleInspector),
+        "noh" | "nohlsearch" => Ok(BrowserAction::ClearSearch),
         "help" | "h" => Ok(BrowserAction::ShowHelp),
         "w" | "write" => parse_optional_session(rest).map(BrowserAction::SaveSession),
         "wq" => parse_optional_session(rest).map(BrowserAction::SaveSessionAndQuit),
         "session" => parse_required_session(rest).map(BrowserAction::LoadSession),
+        "bookmark" | "bm-add" => Ok(BrowserAction::AddBookmark),
+        "bookmarks" | "bm" => Ok(BrowserAction::ShowBookmarks),
+        "bookmark-del" | "bmdel" => Ok(BrowserAction::RemoveBookmark(
+            (!rest.is_empty()).then(|| rest.to_string()),
+        )),
+        "history" | "hist" => Ok(BrowserAction::ShowHistory(
+            (!rest.is_empty()).then(|| rest.to_string()),
+        )),
+        "history-clear" | "histclear" => Ok(BrowserAction::ClearHistory),
         "q" | "quit" | "qa" => Ok(BrowserAction::Quit),
         other => Err(CommandError::UnknownCommand(other.to_string())),
     }

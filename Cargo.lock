@@ -4211,6 +4211,7 @@ dependencies = [
  "gtk4",
  "libloading 0.9.1",
  "log",
+ "rusqlite",
  "serde",
  "serde_json",
  "servo",
@@ -6209,7 +6210,6 @@ dependencies = [
 [[package]]
 name = "servo-gtk"
 version = "0.1.0"
-source = "git+https://github.com/nacho/servo-gtk#c78c94079337803173fd40e69f5f7cd62347cac7"
 dependencies = [
  "async-channel",
  "dpi",

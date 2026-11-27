@@ -35,18 +35,23 @@ pub const HELP_PAGE_HTML: &str = r#"<!DOCTYPE html>
     <tr><td>NORMAL</td><td>Default navigation &amp; shortcut mode (press <code>Esc</code> from any mode).</td></tr>
     <tr><td>INSERT</td><td>Press <code>i</code> to pass keystrokes directly to the page.</td></tr>
     <tr><td>COMMAND</td><td>Press <code>:</code> to enter Ex-style commands at the bottom bar.</td></tr>
+    <tr><td>SEARCH</td><td>Press <code>/</code> to search text on the page, then <code>n</code> / <code>N</code> to jump between matches.</td></tr>
     <tr><td>HINT</td><td>Press <code>f</code> to label clickable elements and type their letters to click/focus them.</td></tr>
   </table>
 
   <h2>Normal Mode Shortcuts</h2>
   <table>
-    <tr><td>j / k</td><td>Scroll down / scroll up</td></tr>
-    <tr><td>h / l</td><td>Scroll left / scroll right</td></tr>
+    <tr><td>[count]j / [count]k</td><td>Scroll down / scroll up (e.g. <code>12j</code> scrolls 12 steps)</td></tr>
+    <tr><td>[count]h / [count]l</td><td>Scroll left / scroll right</td></tr>
     <tr><td>gg / G</td><td>Scroll to top / scroll to bottom</td></tr>
     <tr><td>gt / gT</td><td>Next tab / previous tab (400ms sequence window)</td></tr>
     <tr><td>go</td><td>Edit current page URL in Command mode (<code>:open &lt;URL&gt;</code>)</td></tr>
+    <tr><td>gh</td><td>Open browsing history (<code>about:history</code>)</td></tr>
     <tr><td>wi</td><td>Toggle built-in Web Inspector (JS Console/REPL &amp; DOM Inspector)</td></tr>
-    <tr><td>f</td><td>Show letter hints on links, buttons, and inputs</td></tr>
+    <tr><td>f / F</td><td>Show letter hints on links/inputs (<code>f</code> current tab, <code>F</code> open link in new tab)</td></tr>
+    <tr><td>/</td><td>Search text in the current page (smartcase)</td></tr>
+    <tr><td>n / N</td><td>Jump to next / previous search result</td></tr>
+    <tr><td>b / B</td><td>Add current page to bookmarks / open bookmarks</td></tr>
     <tr><td>d</td><td>Close current tab</td></tr>
     <tr><td>u</td><td>Reopen last closed tab</td></tr>
     <tr><td>o / O</td><td>Open Command mode pre-filled with <code>:open </code> / <code>:Open </code></td></tr>
@@ -66,9 +71,14 @@ pub const HELP_PAGE_HTML: &str = r#"<!DOCTYPE html>
     <tr><td>:reload / :back / :forward</td><td>Page navigation controls</td></tr>
     <tr><td>:zoom &lt;factor|reset&gt;</td><td>Set page zoom level (e.g. <code>:zoom 1.25</code>)</td></tr>
     <tr><td>:inspect</td><td>Toggle built-in JS Console &amp; DOM Inspector (shortcut: <code>wi</code>)</td></tr>
+    <tr><td>:noh</td><td>Clear active search highlights (or press <code>Esc</code> in Normal mode)</td></tr>
     <tr><td>:w [name]</td><td>Save current tabs as session (defaults to <code>default</code>)</td></tr>
     <tr><td>:wq [name]</td><td>Save session and quit</td></tr>
     <tr><td>:session &lt;name&gt;</td><td>Restore a saved session by name</td></tr>
+    <tr><td>:bookmarks / :bookmark</td><td>Open bookmarks list / bookmark current page (shortcut: <code>B</code> / <code>b</code>)</td></tr>
+    <tr><td>:bmdel [index|URL]</td><td>Remove a bookmark by index, URL, or current page</td></tr>
+    <tr><td>:history [query]</td><td>Show or filter browsing history (shortcut: <code>gh</code>, alias: <code>:hist</code>)</td></tr>
+    <tr><td>:history-clear</td><td>Clear all saved browsing history</td></tr>
     <tr><td>:help</td><td>Show this reference page</td></tr>
     <tr><td>:q / :quit</td><td>Quit nservo</td></tr>
   </table>

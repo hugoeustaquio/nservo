@@ -27,7 +27,7 @@ impl SessionController {
         {
             return;
         }
-        tab_view.open_html_in_new_tab("nservo — Help", start_page::HELP_PAGE_HTML);
+        tab_view.open_html_in_new_tab("about:help", "nservo — Help", start_page::HELP_PAGE_HTML);
     }
 
     pub fn save(&self, tab_view: &TabView, status_bar: &StatusBar, name: &str) -> bool {

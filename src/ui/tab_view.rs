@@ -5,7 +5,12 @@ use std::rc::Rc;
 use gtk::prelude::*;
 use servo_gtk::WebView;
 
-use crate::core::{HintEvent, InspectorEvent, Session, TabInfo, TabModel};
+use crate::core::{
+    BookmarkStore, HintEvent, HistoryStore, HistorySync, InspectorEvent, SearchEvent, Session,
+    TabInfo, TabModel,
+};
+use crate::engine::bookmarks_page::{BOOKMARKS_PAGE_URL, render_bookmarks_html};
+use crate::engine::history_page::{HISTORY_PAGE_URL, render_history_html};
 use crate::engine::start_page;
 use crate::engine::web_tab::WebTab;
 use crate::ui::page_overlay::PageOverlay;
@@ -24,6 +29,8 @@ pub struct TabViewCallbacks {
     pub on_popup_url: Rc<dyn Fn(String)>,
     pub on_hint_event: Rc<dyn Fn(u64, HintEvent)>,
     pub on_inspector_event: Rc<dyn Fn(u64, InspectorEvent)>,
+    pub on_search_event: Rc<dyn Fn(u64, SearchEvent)>,
+    pub on_history_sync: Rc<dyn Fn(HistorySync)>,
     pub on_navigation: Rc<dyn Fn(u64)>,
 }
 
@@ -59,8 +66,8 @@ impl TabView {
         self.activate_tab_id(id);
     }
 
-    pub fn open_html_in_new_tab(&self, title: &str, html: &str) {
-        let id = self.insert_tab("about:help", title, WebTab::new_html(html));
+    pub fn open_html_in_new_tab(&self, url: &str, title: &str, html: &str) {
+        let id = self.insert_tab(url, title, WebTab::new_html(html));
         self.activate_tab_id(id);
     }
 
@@ -75,15 +82,14 @@ impl TabView {
         for entry in old_tabs {
             self.stack.remove(entry.overlay.widget());
         }
-        *self.model.borrow_mut() = TabModel::new();
-
-        for saved in &session.tabs {
-            let (url, web_tab) = if saved.url == "about:help" || saved.url.trim().is_empty() {
-                ("about:help", WebTab::new_html(start_page::HELP_PAGE_HTML))
-            } else {
-                (saved.url.as_str(), WebTab::new_url(&saved.url))
-            };
-            self.insert_tab(url, &saved.title, web_tab);
+        {
+            let mut model = self.model.borrow_mut();
+            *model = TabModel::new();
+            // Register saved tabs lazily: only the active tab spawns a Servo
+            // runner immediately; background tabs materialize on first switch.
+            for (idx, saved) in session.tabs.iter().enumerate() {
+                model.insert_tab_at(idx, &saved.url, &saved.title);
+            }
         }
 
         let target_idx = session.active_index.min(session.tabs.len() - 1);
@@ -107,11 +113,11 @@ impl TabView {
         }
     }
 
-    pub fn load_html_in_active_tab(&self, title: &str, html: &str) {
+    pub fn load_html_in_active_tab(&self, url: &str, title: &str, html: &str) {
         if let Some(id) = self.active_tab_id() {
             {
                 let mut model = self.model.borrow_mut();
-                model.update_url(id, "about:help".to_string());
+                model.update_url(id, url.to_string());
                 model.update_title(id, title.to_string());
                 model.set_loading(id, true);
             }
@@ -120,7 +126,7 @@ impl TabView {
             }
             (self.callbacks.on_state_changed)();
         } else {
-            self.open_html_in_new_tab(title, html);
+            self.open_html_in_new_tab(url, title, html);
         }
     }
 
@@ -168,12 +174,8 @@ impl TabView {
         let Some(closed) = self.model.borrow_mut().pop_closed() else {
             return false;
         };
-        let web_tab = if closed.url == "about:help" || closed.url.is_empty() {
-            WebTab::new_html(start_page::HELP_PAGE_HTML)
-        } else {
-            WebTab::new_url(&closed.url)
-        };
-        let id = self.insert_tab_at(closed.index, &closed.url, &closed.title, web_tab);
+        let (url, web_tab) = web_tab_for_url(&closed.url);
+        let id = self.insert_tab_at(closed.index, url, &closed.title, web_tab);
         self.activate_tab_id(id);
         true
     }
@@ -185,6 +187,10 @@ impl TabView {
 
     pub fn active_tab_id(&self) -> Option<u64> {
         self.model.borrow().active_tab().map(|tab| tab.id)
+    }
+
+    pub fn active_tab_info(&self) -> Option<TabInfo> {
+        self.model.borrow().active_tab().cloned()
     }
 
     pub fn active_url(&self) -> Option<String> {
@@ -229,6 +235,7 @@ impl TabView {
     }
 
     fn activate_tab_id(&self, id: u64) {
+        self.ensure_materialized(id);
         self.stack.set_visible_child_name(&tab_stack_name(id));
         if let Some(tab) = self.tab_by_id(id) {
             tab.view().grab_focus();
@@ -238,6 +245,20 @@ impl TabView {
         (self.callbacks.on_state_changed)();
     }
 
+    fn ensure_materialized(&self, id: u64) {
+        if self.tabs.borrow().contains_key(&id) {
+            return;
+        }
+        let Some(url) = self.model.borrow().tabs().iter().find(|t| t.id == id).map(|t| t.url.clone()) else {
+            return;
+        };
+        let (resolved, web_tab) = web_tab_for_url(&url);
+        if resolved != url {
+            self.model.borrow_mut().update_url(id, resolved.to_string());
+        }
+        self.attach_web_tab(id, web_tab);
+    }
+
     fn insert_tab(&self, url: &str, title: &str, web_tab: WebTab) -> u64 {
         let end = self.model.borrow().len();
         self.insert_tab_at(end, url, title, web_tab)
@@ -245,29 +266,33 @@ impl TabView {
 
     fn insert_tab_at(&self, index: usize, url: &str, title: &str, web_tab: WebTab) -> u64 {
         let id = self.model.borrow_mut().insert_tab_at(index, url, title);
-        self.model.borrow_mut().set_loading(id, true);
-
-        let overlay = PageOverlay::new(&web_tab);
-        wire_tab_signals(
-            id,
-            &web_tab,
-            overlay.downgrade(),
-            &self.model,
-            &self.callbacks,
-        );
-        self.stack
-            .add_named(overlay.widget(), Some(&tab_stack_name(id)));
-        self.tabs.borrow_mut().insert(
-            id,
-            TabEntry {
-                tab: web_tab,
-                overlay,
-            },
-        );
+        self.attach_web_tab(id, web_tab);
         id
+    }
+
+    fn attach_web_tab(&self, id: u64, web_tab: WebTab) {
+        self.model.borrow_mut().set_loading(id, true);
+        let overlay = PageOverlay::new(&web_tab);
+        wire_tab_signals(id, &web_tab, overlay.downgrade(), &self.model, &self.callbacks);
+        self.stack.add_named(overlay.widget(), Some(&tab_stack_name(id)));
+        self.tabs.borrow_mut().insert(id, TabEntry { tab: web_tab, overlay });
     }
 }
 
 fn tab_stack_name(id: u64) -> String {
     format!("tab-{id}")
+}
+
+fn web_tab_for_url(url: &str) -> (&str, WebTab) {
+    if url == BOOKMARKS_PAGE_URL {
+        let list = BookmarkStore::default_store().list().unwrap_or_default();
+        (BOOKMARKS_PAGE_URL, WebTab::new_html(&render_bookmarks_html(&list)))
+    } else if url == HISTORY_PAGE_URL {
+        let list = HistoryStore::default_store().recent(200).unwrap_or_default();
+        (HISTORY_PAGE_URL, WebTab::new_html(&render_history_html(&list, None)))
+    } else if url == "about:help" || url.trim().is_empty() {
+        ("about:help", WebTab::new_html(start_page::HELP_PAGE_HTML))
+    } else {
+        (url, WebTab::new_url(url))
+    }
 }

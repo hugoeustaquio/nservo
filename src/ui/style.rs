@@ -28,9 +28,15 @@ window.nservo-window {
     color: #c0caf5;
 }
 
-.tab-button.tab-active {
+button.tab-button.tab-active,
+button.tab-button.tab-active:hover {
     background-color: #3b4261;
-    color: #c0caf5;
+    color: #000000;
+    font-weight: bold;
+}
+
+button.tab-button.tab-active label {
+    color: #000000;
     font-weight: bold;
 }
 
@@ -58,6 +64,10 @@ window.nservo-window {
 
 .mode-badge.mode-command {
     background-color: #e0af68;
+}
+
+.mode-badge.mode-search {
+    background-color: #ff9e64;
 }
 
 .mode-badge.mode-hint {
@@ -95,6 +105,10 @@ window.nservo-window {
 .command-prefix {
     color: #e0af68;
     font-weight: bold;
+}
+
+.command-prefix.search-prefix {
+    color: #ff9e64;
 }
 
 .command-entry {

@@ -1,95 +1,105 @@
 /// Name of the `servo-gtk` `UserContentManager` script message handler for hints.
 pub const HINT_MESSAGE_HANDLER: &str = "nservoHints";
 
-/// JavaScript executed in the page when entering Hint mode (`f`).
+/// JavaScript executed in the page when entering Hint mode (`f` or `F`).
 ///
-/// Finds every visible link, button, and input in the viewport, assigns
-/// prefix-free letter labels (`a`, `b`, `c`, ... or `aa`, `ab`, ... when >26),
-/// draws styled overlay rectangles on each element, flushes Servo's software
-/// compositor so the overlays appear immediately, and notifies native Rust.
-pub fn activate_hints_script() -> &'static str {
-    r#"(function () {
+/// When `new_tab` is `false` (`f`), hints all visible links, buttons, and inputs
+/// in the viewport. When `new_tab` is `true` (`F`), hints navigable links only
+/// and opens the selected link in a new browser tab.
+pub fn activate_hints_script(new_tab: bool) -> String {
+    let new_tab_js = if new_tab { "true" } else { "false" };
+    let accent = if new_tab { "#7aa2f7" } else { "#e0af68" };
+    let tint = if new_tab {
+        "rgba(122,162,247,0.16)"
+    } else {
+        "rgba(224,175,104,0.14)"
+    };
+    format!(
+        r#"(function () {{
   var OVERLAY_ID = '__nservo_hint_overlay__';
   var old = document.getElementById(OVERLAY_ID);
   if (old) old.remove();
   window.__nservoHints = [];
+  window.__nservoHintsNewTab = {new_tab_js};
 
-  function notify(payload) {
-    if (window.servoGtk && window.servoGtk.messageHandlers && window.servoGtk.messageHandlers.nservoHints) {
+  function notify(payload) {{
+    if (window.servoGtk && window.servoGtk.messageHandlers && window.servoGtk.messageHandlers.nservoHints) {{
       window.servoGtk.messageHandlers.nservoHints.postMessage(payload);
-    }
-  }
+    }}
+  }}
 
-  function flushFrame(target) {
+  function flushFrame(target) {{
     if (!target) return;
     void target.offsetHeight;
-    setTimeout(function () { target.style.outline = '1px solid transparent'; }, 25);
-    setTimeout(function () { target.style.outline = ''; }, 75);
-  }
+    setTimeout(function () {{ target.style.outline = '1px solid transparent'; }}, 25);
+    setTimeout(function () {{ target.style.outline = ''; }}, 75);
+  }}
 
-  var selector = [
-    'a[href]',
-    'button',
-    'input:not([type="hidden"])',
-    'textarea',
-    'select',
-    'summary',
-    '[role="link"]',
-    '[role="button"]',
-    '[role="textbox"]',
-    '[role="searchbox"]',
-    '[role="combobox"]',
-    '[contenteditable="true"]',
-    '[contenteditable=""]'
-  ].join(',');
+  var selector = {new_tab_js}
+    ? 'a[href],area[href]'
+    : [
+        'a[href]',
+        'button',
+        'input:not([type="hidden"])',
+        'textarea',
+        'select',
+        'summary',
+        '[role="link"]',
+        '[role="button"]',
+        '[role="textbox"]',
+        '[role="searchbox"]',
+        '[role="combobox"]',
+        '[contenteditable="true"]',
+        '[contenteditable=""]'
+      ].join(',');
 
   var nodes = document.querySelectorAll(selector);
   var vw = window.innerWidth || document.documentElement.clientWidth || 0;
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
   var targets = [];
 
-  for (var i = 0; i < nodes.length; i++) {
+  for (var i = 0; i < nodes.length; i++) {{
     var el = nodes[i];
     if (el.disabled) continue;
     var rect = el.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
     if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= vh || rect.left >= vw) continue;
     var style = window.getComputedStyle(el);
-    if (!style || style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') <= 0) {
+    if (!style || style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') <= 0) {{
       continue;
-    }
-    targets.push({ el: el, rect: rect });
-  }
+    }}
+    targets.push({{ el: el, rect: rect }});
+  }}
 
-  if (targets.length === 0) {
-    notify({ event: 'empty' });
+  if (targets.length === 0) {{
+    notify({{ event: 'empty' }});
     return;
-  }
+  }}
 
   var alphabet = 'abcdefghijklmnopqrstuvwxyz';
   var base = alphabet.length;
   var len = 1;
   var cap = base;
-  while (cap < targets.length) {
+  while (cap < targets.length) {{
     len += 1;
     cap *= base;
-  }
+  }}
 
-  function makeLabel(idx) {
+  function makeLabel(idx) {{
     var chars = new Array(len);
-    for (var p = len - 1; p >= 0; p--) {
+    for (var p = len - 1; p >= 0; p--) {{
       chars[p] = alphabet[idx % base];
       idx = Math.floor(idx / base);
-    }
+    }}
     return chars.join('');
-  }
+  }}
 
   var container = document.createElement('div');
   container.id = OVERLAY_ID;
   container.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
 
   var items = [];
-  for (var j = 0; j < targets.length; j++) {
+  for (var j = 0; j < targets.length; j++) {{
     var label = makeLabel(j);
     var t = targets[j];
     var r = t.rect;
@@ -104,8 +114,8 @@ pub fn activate_hints_script() -> &'static str {
       'top:' + Math.round(r.top) + 'px;' +
       'width:' + Math.round(r.width) + 'px;' +
       'height:' + Math.round(r.height) + 'px;' +
-      'border:1px solid #e0af68;' +
-      'background:rgba(224,175,104,0.14);' +
+      'border:1px solid {accent};' +
+      'background:{tint};' +
       'border-radius:2px;';
 
     var bx = Math.max(0, Math.min(vw - 24, Math.round(r.left)));
@@ -116,7 +126,7 @@ pub fn activate_hints_script() -> &'static str {
       'position:fixed;pointer-events:none;' +
       'left:' + bx + 'px;' +
       'top:' + by + 'px;' +
-      'background:#e0af68;color:#16161e;' +
+      'background:{accent};color:#16161e;' +
       'border:1px solid #16161e;border-radius:3px;' +
       'font:bold 12px/1 monospace;padding:2px 5px;' +
       'box-shadow:0 1px 3px rgba(0,0,0,0.45);';
@@ -124,15 +134,16 @@ pub fn activate_hints_script() -> &'static str {
     group.appendChild(outline);
     group.appendChild(badge);
     container.appendChild(group);
-    items.push({ label: label, el: t.el, group: group, badge: badge });
-  }
+    items.push({{ label: label, el: t.el, group: group, badge: badge }});
+  }}
 
   var host = document.body || document.documentElement;
   host.appendChild(container);
   window.__nservoHints = items;
   flushFrame(host);
-  notify({ event: 'shown', count: items.length });
-})();"#
+  notify({{ event: 'shown', count: items.length }});
+}})();"#
+    )
 }
 
 /// JavaScript executed as the user types hint characters (or presses Backspace).
@@ -200,7 +211,16 @@ pub fn filter_hints_script(typed: &str) -> String {
 
   if (exact) {{
     var el = exact.el;
+    var openNewTab = !!window.__nservoHintsNewTab;
     clearAll();
+    if (openNewTab) {{
+      var anchor = (el.closest && el.closest('a[href],area[href]')) || el;
+      var href = (anchor && typeof anchor.href === 'string') ? anchor.href : '';
+      if (href && href.toLowerCase().indexOf('javascript:') !== 0) {{
+        notify({{ event: 'open_new_tab', url: href }});
+        return;
+      }}
+    }}
     var isInput = isTextInput(el);
     try {{ el.focus(); }} catch (_) {{}}
     try {{ el.click(); }} catch (_) {{}}
@@ -228,6 +248,7 @@ pub fn clear_hints_script() -> &'static str {
   var overlay = document.getElementById('__nservo_hint_overlay__');
   if (overlay) overlay.remove();
   window.__nservoHints = [];
+  window.__nservoHintsNewTab = false;
   var host = document.body || document.documentElement;
   if (!host) return;
   void host.offsetHeight;

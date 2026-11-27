@@ -1,9 +1,10 @@
 use gtk::prelude::*;
 
-/// Bottom Neovim-style command line (`:` + entry), visible only in Command mode.
+/// Bottom Neovim-style prompt bar (`:` for Command mode, `/` for Search mode).
 #[derive(Clone)]
 pub struct CommandBar {
     container: gtk::Box,
+    prefix: gtk::Label,
     entry: gtk::Entry,
 }
 
@@ -31,7 +32,11 @@ impl CommandBar {
         container.append(&prefix);
         container.append(&entry);
 
-        Self { container, entry }
+        Self {
+            container,
+            prefix,
+            entry,
+        }
     }
 
     pub fn widget(&self) -> &gtk::Box {
@@ -45,7 +50,19 @@ impl CommandBar {
 
     /// Show the `:` command bar pre-filled with `initial` and place the cursor at the end.
     pub fn enter_command_mode_with(&self, initial: &str) {
+        self.prefix.set_text(":");
+        self.prefix.remove_css_class("search-prefix");
         self.entry.set_text(initial);
+        self.container.set_visible(true);
+        self.entry.grab_focus();
+        self.entry.set_position(-1);
+    }
+
+    /// Show the `/` search bar and focus it for typing.
+    pub fn enter_search_mode(&self) {
+        self.prefix.set_text("/");
+        self.prefix.add_css_class("search-prefix");
+        self.entry.set_text("");
         self.container.set_visible(true);
         self.entry.grab_focus();
         self.entry.set_position(-1);

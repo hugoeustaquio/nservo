@@ -1,6 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gtk::gdk;
 use gtk::glib;
@@ -113,8 +113,8 @@ impl KeyHandler {
             return glib::Propagation::Proceed;
         }
 
-        // In Command mode, Backspace on an empty entry exits back to Normal mode.
-        if current_mode == Mode::Command
+        // In Command or Search mode, Backspace on an empty entry exits back to Normal mode.
+        if matches!(current_mode, Mode::Command | Mode::Search)
             && keyval == gdk::Key::BackSpace
             && (callbacks.is_command_entry_empty)()
         {
@@ -173,7 +173,12 @@ impl KeyHandler {
                 glib::Propagation::Stop
             }
             KeyOutcome::Pending(prefix) => {
-                self.schedule_timeout(callbacks.on_pending_changed.clone());
+                let timeout = self
+                    .mapper
+                    .borrow()
+                    .pending_timeout()
+                    .unwrap_or(KEY_SEQUENCE_TIMEOUT);
+                self.schedule_timeout(timeout, callbacks.on_pending_changed.clone());
                 (callbacks.on_pending_changed)(Some(prefix));
                 glib::Propagation::Stop
             }
@@ -186,13 +191,13 @@ impl KeyHandler {
         }
     }
 
-    fn schedule_timeout(&self, on_pending_changed: Rc<dyn Fn(Option<String>)>) {
+    fn schedule_timeout(&self, timeout: Duration, on_pending_changed: Rc<dyn Fn(Option<String>)>) {
         let next_gen = self.timer_gen.get().wrapping_add(1);
         self.timer_gen.set(next_gen);
 
         let mapper = self.mapper.clone();
         let timer_gen = self.timer_gen.clone();
-        glib::timeout_add_local_once(KEY_SEQUENCE_TIMEOUT, move || {
+        glib::timeout_add_local_once(timeout, move || {
             if timer_gen.get() != next_gen {
                 return;
             }

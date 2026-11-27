@@ -9,7 +9,31 @@ const LOGGER: glib::GlibLogger = glib::GlibLogger::new(
     glib::GlibLoggerDomain::CrateTarget,
 );
 
+#[cfg(target_os = "linux")]
+fn arm_runner_parent_death_signal() {
+    let is_runner = std::env::args()
+        .skip(1)
+        .take_while(|arg| arg != "--")
+        .any(|arg| arg == "--servo-gtk-runner");
+    if !is_runner {
+        return;
+    }
+    const PR_SET_PDEATHSIG: i32 = 1;
+    const SIGKILL: usize = 9;
+    unsafe extern "C" {
+        fn prctl(option: i32, arg2: usize, arg3: usize, arg4: usize, arg5: usize) -> i32;
+    }
+    // Ensure a Servo runner subprocess never survives as an orphan if the
+    // parent nservo process exits or crashes.
+    unsafe {
+        prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
+    }
+}
+
 fn main() -> ExitCode {
+    #[cfg(target_os = "linux")]
+    arm_runner_parent_death_signal();
+
     // Must be the very first call in main(): servo-gtk re-executes this
     // binary as its Servo rendering subprocess.
     servo_gtk::run_as_runner_if_requested();

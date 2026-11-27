@@ -13,10 +13,10 @@ impl HintController {
         Self::default()
     }
 
-    pub fn start(&self, tab_view: &TabView) {
+    pub fn start(&self, tab_view: &TabView, new_tab: bool) {
         self.typed.borrow_mut().clear();
         if let Some(tab) = tab_view.active_tab() {
-            tab.start_hints();
+            tab.start_hints(new_tab);
         }
     }
 

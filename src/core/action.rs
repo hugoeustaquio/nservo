@@ -10,10 +10,15 @@ pub enum BrowserAction {
     /// Enter Command mode pre-filled with `:open <current URL>` (`go`).
     EditCurrentUrl,
 
-    /// Link/element hint mode actions (`f`).
-    StartHints,
+    /// Link/element hint mode actions (`f` current tab, `F` new tab).
+    StartHints { new_tab: bool },
     HintChar(char),
     HintBackspace,
+
+    /// In-page Vim-style search actions (`/`, `n`, `N`, `:noh`).
+    SearchNext,
+    SearchPrev,
+    ClearSearch,
 
     /// Insert composed or Unicode/UTF-16 text into the focused page input.
     InsertText(String),
@@ -30,11 +35,11 @@ pub enum BrowserAction {
     CutSelection,
     PasteClipboard,
 
-    /// Viewport scrolling actions.
-    ScrollDown,
-    ScrollUp,
-    ScrollLeft,
-    ScrollRight,
+    /// Viewport scrolling actions (directional motions carry a repeat count, e.g. `12j`).
+    ScrollDown(u32),
+    ScrollUp(u32),
+    ScrollLeft(u32),
+    ScrollRight(u32),
     ScrollTop,
     ScrollBottom,
 
@@ -56,10 +61,15 @@ pub enum BrowserAction {
     ShowHelp,
     ToggleInspector,
 
-    /// Session persistence actions.
+    /// Session, bookmark & history persistence actions.
     SaveSession(String),
     SaveSessionAndQuit(String),
     LoadSession(String),
+    AddBookmark,
+    ShowBookmarks,
+    RemoveBookmark(Option<String>),
+    ShowHistory(Option<String>),
+    ClearHistory,
 
     /// Exit the browser application.
     Quit,

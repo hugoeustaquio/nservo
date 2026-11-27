@@ -1,8 +1,8 @@
 use gtk::prelude::*;
 
 use crate::core::{
-    BrowserAction, ConsoleEntry, ConsoleLevel, HintEvent, InspectorEvent, Mode, ZOOM_STEP,
-    step_zoom,
+    BrowserAction, ConsoleEntry, ConsoleLevel, HintEvent, InspectorEvent, Mode, SearchEvent,
+    ZOOM_STEP, step_zoom,
 };
 use crate::engine::{scroll, start_page};
 use crate::ui::window::BrowserWindow;
@@ -24,9 +24,9 @@ impl BrowserWindow {
                 };
                 self.transition_mode(Mode::Command, &prefix);
             }
-            BrowserAction::StartHints => {
+            BrowserAction::StartHints { new_tab } => {
                 self.set_mode(Mode::Hint);
-                self.hints.start(&self.tab_view);
+                self.hints.start(&self.tab_view, new_tab);
             }
             BrowserAction::HintChar(ch) => {
                 let typed = self.hints.push_char(&self.tab_view, ch);
@@ -36,6 +36,17 @@ impl BrowserWindow {
                 Some(rem) => self.set_pending_display((!rem.is_empty()).then_some(rem)),
                 None => self.set_mode(Mode::Normal),
             },
+            BrowserAction::SearchNext => {
+                self.search.step(&self.tab_view, &self.status_bar, 1);
+            }
+            BrowserAction::SearchPrev => {
+                self.search.step(&self.tab_view, &self.status_bar, -1);
+            }
+            BrowserAction::ClearSearch => {
+                if self.search.clear(&self.tab_view) {
+                    self.sync_chrome();
+                }
+            }
             BrowserAction::InsertText(text) => {
                 if let Some(tab) = self.tab_view.active_tab() {
                     tab.insert_utf16_text(&text);
@@ -66,10 +77,10 @@ impl BrowserWindow {
                     tab.paste_from_clipboard();
                 }
             }
-            BrowserAction::ScrollDown
-            | BrowserAction::ScrollUp
-            | BrowserAction::ScrollLeft
-            | BrowserAction::ScrollRight
+            BrowserAction::ScrollDown(_)
+            | BrowserAction::ScrollUp(_)
+            | BrowserAction::ScrollLeft(_)
+            | BrowserAction::ScrollRight(_)
             | BrowserAction::ScrollTop
             | BrowserAction::ScrollBottom => {}
             BrowserAction::NextTab => self.tab_view.next_tab(),
@@ -94,8 +105,11 @@ impl BrowserWindow {
                 self.with_active_view(|v| v.set_zoom_level(step_zoom(v.zoom_level(), -ZOOM_STEP)));
             }
             BrowserAction::ShowHelp => {
-                self.tab_view
-                    .load_html_in_active_tab("nservo — Help", start_page::HELP_PAGE_HTML);
+                self.tab_view.load_html_in_active_tab(
+                    "about:help",
+                    "nservo — Help",
+                    start_page::HELP_PAGE_HTML,
+                );
             }
             BrowserAction::ToggleInspector => {
                 self.set_inspector_open(!self.inspector.is_open());
@@ -110,6 +124,23 @@ impl BrowserWindow {
             }
             BrowserAction::LoadSession(name) => {
                 self.sessions.load(&self.tab_view, &self.status_bar, &name);
+            }
+            BrowserAction::AddBookmark => {
+                self.bookmarks.add_current(&self.tab_view, &self.status_bar);
+            }
+            BrowserAction::ShowBookmarks => {
+                self.bookmarks.show(&self.tab_view, &self.status_bar);
+            }
+            BrowserAction::RemoveBookmark(target) => {
+                self.bookmarks
+                    .remove(&self.tab_view, &self.status_bar, target.as_deref());
+            }
+            BrowserAction::ShowHistory(query) => {
+                self.history
+                    .show(&self.tab_view, &self.status_bar, query.as_deref());
+            }
+            BrowserAction::ClearHistory => {
+                self.history.clear(&self.tab_view, &self.status_bar);
             }
             BrowserAction::Quit => self.window.close(),
         }
@@ -221,11 +252,21 @@ impl BrowserWindow {
             HintEvent::Activated { is_input } => {
                 self.set_mode(if is_input { Mode::Insert } else { Mode::Normal });
             }
+            HintEvent::OpenInNewTab { url } => {
+                self.set_mode(Mode::Normal);
+                self.tab_view.open_url_in_new_tab(&url);
+            }
             HintEvent::Cancelled => self.set_mode(Mode::Normal),
             HintEvent::Empty => {
                 self.set_mode(Mode::Normal);
                 self.status_bar.show_notice("No clickable elements found");
             }
+        }
+    }
+
+    pub(super) fn handle_search_event(&self, tab_id: u64, event: SearchEvent) {
+        if self.tab_view.active_tab_id() == Some(tab_id) {
+            self.search.handle_event(&self.status_bar, event);
         }
     }
 

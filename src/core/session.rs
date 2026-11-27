@@ -1,24 +1,23 @@
 use std::fmt;
-use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use gtk::glib;
-use serde::{Deserialize, Serialize};
+use rusqlite::{OptionalExtension, params};
 
 use crate::core::TabInfo;
+use crate::core::storage::{StorageError, default_db_path, unix_timestamp_secs, with_db};
 
 /// Default session name used by `:w`, `:wq`, and automatic startup restore.
 pub const DEFAULT_SESSION_NAME: &str = "default";
 
-/// Serializable representation of a single saved browser tab.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Persisted representation of a single saved browser tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavedTab {
     pub url: String,
     pub title: String,
 }
 
 /// Named browser session storing open tabs and the active tab index.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Session {
     pub name: String,
     pub active_index: usize,
@@ -53,7 +52,16 @@ pub enum SessionError {
     InvalidName(String),
     NotFound(String),
     Io(std::io::Error),
-    Format(serde_json::Error),
+    Db(rusqlite::Error),
+}
+
+impl From<StorageError> for SessionError {
+    fn from(err: StorageError) -> Self {
+        match err {
+            StorageError::Io(e) => Self::Io(e),
+            StorageError::Db(e) => Self::Db(e),
+        }
+    }
 }
 
 impl fmt::Display for SessionError {
@@ -65,14 +73,14 @@ impl fmt::Display for SessionError {
             ),
             Self::NotFound(name) => write!(f, "Session '{name}' not found"),
             Self::Io(err) => write!(f, "Session I/O error: {err}"),
-            Self::Format(err) => write!(f, "Corrupted session file: {err}"),
+            Self::Db(err) => write!(f, "Session database error: {err}"),
         }
     }
 }
 
 impl std::error::Error for SessionError {}
 
-/// Validate a session name to prevent path traversal or invalid filenames.
+/// Validate a session name (`[A-Za-z0-9_-]+`).
 pub fn validate_session_name(name: &str) -> Result<(), SessionError> {
     let valid = !name.is_empty()
         && name
@@ -85,40 +93,114 @@ pub fn validate_session_name(name: &str) -> Result<(), SessionError> {
     }
 }
 
-/// Filesystem-backed store for named JSON session files.
+/// SQLite-backed store for named browser sessions.
 #[derive(Debug, Clone)]
 pub struct SessionStore {
-    dir: PathBuf,
+    db_path: PathBuf,
 }
 
 impl SessionStore {
-    pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+    pub fn new(db_path: PathBuf) -> Self {
+        Self { db_path }
     }
 
-    /// Default XDG data directory: `$XDG_DATA_HOME/nservo/sessions`.
+    /// Default SQLite database under `$XDG_CONFIG_HOME/nservo/nservo.db`
+    /// (falling back to `$HOME/.config/nservo/nservo.db`).
     pub fn default_store() -> Self {
-        Self::new(glib::user_data_dir().join("nservo").join("sessions"))
+        Self::new(default_db_path())
+    }
+
+    pub fn db_path(&self) -> &Path {
+        &self.db_path
     }
 
     pub fn save(&self, session: &Session) -> Result<(), SessionError> {
         validate_session_name(&session.name)?;
-        fs::create_dir_all(&self.dir).map_err(SessionError::Io)?;
-        let json = serde_json::to_string_pretty(session).map_err(SessionError::Format)?;
-        fs::write(self.session_path(&session.name), json).map_err(SessionError::Io)
+        with_db(&self.db_path, |conn| {
+            let tx = conn.transaction().map_err(SessionError::Db)?;
+
+            let active_idx = i64::try_from(session.active_index).unwrap_or(0);
+            tx.execute(
+                "INSERT INTO sessions (name, active_index, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(name) DO UPDATE SET active_index = excluded.active_index,
+                                                 updated_at = excluded.updated_at",
+                params![session.name, active_idx, unix_timestamp_secs()],
+            )
+            .map_err(SessionError::Db)?;
+
+            tx.execute(
+                "DELETE FROM session_tabs WHERE session_name = ?1",
+                params![session.name],
+            )
+            .map_err(SessionError::Db)?;
+
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO session_tabs (session_name, position, url, title)
+                         VALUES (?1, ?2, ?3, ?4)",
+                    )
+                    .map_err(SessionError::Db)?;
+                for (idx, tab) in session.tabs.iter().enumerate() {
+                    let pos = i64::try_from(idx).unwrap_or(0);
+                    stmt.execute(params![session.name, pos, tab.url, tab.title])
+                        .map_err(SessionError::Db)?;
+                }
+            }
+
+            tx.commit().map_err(SessionError::Db)?;
+            Ok(())
+        })
     }
 
     pub fn load(&self, name: &str) -> Result<Session, SessionError> {
         validate_session_name(name)?;
-        let path = self.session_path(name);
-        let raw = match fs::read_to_string(&path) {
-            Ok(data) => data,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        with_db(&self.db_path, |conn| {
+            let active_raw: Option<i64> = conn
+                .query_row(
+                    "SELECT active_index FROM sessions WHERE name = ?1",
+                    params![name],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(SessionError::Db)?;
+
+            let Some(active_raw) = active_raw else {
                 return Err(SessionError::NotFound(name.to_string()));
-            }
-            Err(err) => return Err(SessionError::Io(err)),
-        };
-        serde_json::from_str(&raw).map_err(SessionError::Format)
+            };
+
+            let mut stmt = conn
+                .prepare(
+                    "SELECT url, title FROM session_tabs
+                     WHERE session_name = ?1
+                     ORDER BY position ASC",
+                )
+                .map_err(SessionError::Db)?;
+
+            let tabs: Vec<SavedTab> = stmt
+                .query_map(params![name], |row| {
+                    Ok(SavedTab {
+                        url: row.get(0)?,
+                        title: row.get(1)?,
+                    })
+                })
+                .map_err(SessionError::Db)?
+                .collect::<Result<_, _>>()
+                .map_err(SessionError::Db)?;
+
+            let active_index = usize::try_from(active_raw).unwrap_or(0);
+            let clamped_active = if tabs.is_empty() {
+                0
+            } else {
+                active_index.min(tabs.len() - 1)
+            };
+
+            Ok(Session {
+                name: name.to_string(),
+                active_index: clamped_active,
+                tabs,
+            })
+        })
     }
 
     /// Load a session if it exists, returning `Ok(None)` when missing.
@@ -130,7 +212,18 @@ impl SessionStore {
         }
     }
 
-    fn session_path(&self, name: &str) -> PathBuf {
-        self.dir.join(format!("{name}.json"))
+    /// Return all saved session names sorted alphabetically.
+    pub fn list_names(&self) -> Result<Vec<String>, SessionError> {
+        with_db(&self.db_path, |conn| {
+            let mut stmt = conn
+                .prepare("SELECT name FROM sessions ORDER BY name ASC")
+                .map_err(SessionError::Db)?;
+            let names = stmt
+                .query_map([], |row| row.get(0))
+                .map_err(SessionError::Db)?
+                .collect::<Result<_, _>>()
+                .map_err(SessionError::Db)?;
+            Ok(names)
+        })
     }
 }

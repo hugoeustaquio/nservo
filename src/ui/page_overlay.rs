@@ -10,7 +10,7 @@ use crate::core::ScrollMetrics;
 use crate::engine::web_tab::{WeakWebTab, WebTab};
 
 const HIDE_DELAY: Duration = Duration::from_millis(1200);
-const WHEEL_STEP_PX: f64 = 90.0;
+const WHEEL_STEP_PX: f64 = 120.0;
 const EDGE_REVEAL_PX: f64 = 20.0;
 
 #[derive(Clone)]

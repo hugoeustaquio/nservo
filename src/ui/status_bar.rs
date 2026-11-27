@@ -101,7 +101,13 @@ impl StatusBar {
 
     fn update_mode_badge(&self, mode: Mode) {
         self.mode_label.set_text(mode.label());
-        for candidate in [Mode::Normal, Mode::Insert, Mode::Command, Mode::Hint] {
+        for candidate in [
+            Mode::Normal,
+            Mode::Insert,
+            Mode::Command,
+            Mode::Search,
+            Mode::Hint,
+        ] {
             self.mode_label.remove_css_class(candidate.css_class());
         }
         self.mode_label.add_css_class(mode.css_class());

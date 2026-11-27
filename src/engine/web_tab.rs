@@ -22,6 +22,9 @@ use crate::engine::scroll::{
     SCROLL_MESSAGE_HANDLER, jump_scroll_x_script, jump_scroll_y_script, scroll_hide_css,
     scroll_init_script, smooth_scroll_by_script,
 };
+use crate::engine::search_js::{
+    SEARCH_MESSAGE_HANDLER, clear_search_script, search_query_script, search_step_script,
+};
 use crate::engine::text_input_js::{insert_utf16_script, move_line_edge_script, move_word_script};
 
 const READY_FALLBACK_TIMEOUT: Duration = Duration::from_millis(5000);
@@ -74,6 +77,7 @@ impl WebTab {
         user_content.register_script_message_handler(CLIPBOARD_MESSAGE_HANDLER);
         user_content.register_script_message_handler(INSPECTOR_MESSAGE_HANDLER);
         user_content.register_script_message_handler(SCROLL_MESSAGE_HANDLER);
+        user_content.register_script_message_handler(SEARCH_MESSAGE_HANDLER);
         user_content.add_style_sheet(&UserStyleSheet::new(scroll_hide_css()));
         user_content.add_script(&UserScript::new(inspector_init_script()));
         user_content.add_script(&UserScript::new(scroll_init_script()));
@@ -114,8 +118,8 @@ impl WebTab {
         &self.user_content
     }
 
-    pub fn start_hints(&self) {
-        self.view.evaluate_javascript(activate_hints_script());
+    pub fn start_hints(&self, new_tab: bool) {
+        self.view.evaluate_javascript(&activate_hints_script(new_tab));
     }
 
     pub fn filter_hints(&self, typed: &str) {
@@ -193,6 +197,19 @@ impl WebTab {
 
     pub fn jump_scroll_x(&self, x: f64) {
         self.view.evaluate_javascript(&jump_scroll_x_script(x));
+    }
+
+    pub fn search_page(&self, query: &str) {
+        self.view.evaluate_javascript(&search_query_script(query));
+    }
+
+    pub fn search_step(&self, delta: i32, fallback_query: &str) {
+        self.view
+            .evaluate_javascript(&search_step_script(delta, fallback_query));
+    }
+
+    pub fn clear_search(&self) {
+        self.view.evaluate_javascript(clear_search_script());
     }
 
     pub fn is_ready(&self) -> bool {

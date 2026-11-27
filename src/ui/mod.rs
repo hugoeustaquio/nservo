@@ -1,11 +1,14 @@
+pub mod bookmark_controller;
 pub mod command_bar;
 pub mod hint_controller;
+pub mod history_controller;
 pub mod im_bridge;
 pub mod inspector_panel;
 mod inspector_views;
 mod key_chords;
 pub mod key_handler;
 mod page_overlay;
+pub mod search_controller;
 pub mod session_controller;
 pub mod status_bar;
 pub mod style;

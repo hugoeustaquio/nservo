@@ -4,6 +4,7 @@ use nservo::core::{
     BrowserAction, HintEvent, KeyInput, KeyMapper, KeyOutcome, Mode, generate_hint_labels,
     parse_hint_message,
 };
+use nservo::engine::hints_js::{activate_hints_script, filter_hints_script};
 
 #[test]
 fn hint_labels_are_single_letters_up_to_26() {
@@ -50,6 +51,16 @@ fn parse_hint_messages_handles_all_variants() {
         Some(HintEvent::Activated { is_input: false })
     );
     assert_eq!(
+        parse_hint_message(r#"{"event":"open_new_tab","url":"https://servo.org/"}"#),
+        Some(HintEvent::OpenInNewTab {
+            url: "https://servo.org/".to_string()
+        })
+    );
+    assert_eq!(
+        parse_hint_message(r#"{"event":"open_new_tab","url":"   "}"#),
+        None
+    );
+    assert_eq!(
         parse_hint_message(r#"{"event":"cancelled"}"#),
         Some(HintEvent::Cancelled)
     );
@@ -67,7 +78,11 @@ fn keymap_handles_f_and_hint_mode_keys() {
 
     assert_eq!(
         mapper.handle_key(Mode::Normal, KeyInput::Char('f'), now),
-        KeyOutcome::Action(BrowserAction::StartHints)
+        KeyOutcome::Action(BrowserAction::StartHints { new_tab: false })
+    );
+    assert_eq!(
+        mapper.handle_key(Mode::Normal, KeyInput::Char('F'), now),
+        KeyOutcome::Action(BrowserAction::StartHints { new_tab: true })
     );
     assert_eq!(
         mapper.handle_key(Mode::Hint, KeyInput::Char('c'), now),
@@ -89,4 +104,18 @@ fn keymap_handles_f_and_hint_mode_keys() {
         mapper.handle_key(Mode::Hint, KeyInput::Char('5'), now),
         KeyOutcome::Consumed
     );
+}
+
+#[test]
+fn hint_scripts_distinguish_current_tab_and_new_tab_modes() {
+    let cur = activate_hints_script(false);
+    assert!(cur.contains("window.__nservoHintsNewTab = false;"));
+
+    let new_tab = activate_hints_script(true);
+    assert!(new_tab.contains("window.__nservoHintsNewTab = true;"));
+    assert!(new_tab.contains("a[href],area[href]"));
+
+    let filter = filter_hints_script("a");
+    assert!(filter.contains("open_new_tab"));
+    assert!(filter.contains("window.__nservoHintsNewTab"));
 }

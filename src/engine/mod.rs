@@ -1,9 +1,12 @@
+pub mod bookmarks_page;
 pub mod clipboard;
 pub mod epoxy;
 pub mod gpu;
 pub mod hints_js;
+pub mod history_page;
 pub mod inspector_js;
 pub mod scroll;
+pub mod search_js;
 pub mod start_page;
 pub mod text_input_js;
 pub mod web_tab;

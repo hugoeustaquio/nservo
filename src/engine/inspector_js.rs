@@ -9,6 +9,8 @@ pub fn inspector_init_script() -> &'static str {
 
   var IPC_PREFIX = '__servo_gtk_msg__';
   var sending = false;
+  var burstStart = 0;
+  var burstCount = 0;
 
   function post(payload) {
     if (sending) return;
@@ -39,7 +41,9 @@ pub fn inspector_init_script() -> &'static str {
     }
     try {
       var seen = new WeakSet();
+      var fields = 0;
       var json = JSON.stringify(val, function(_k, v) {
+        if (++fields > 64) return '[Truncated]';
         if (typeof v === 'bigint') return String(v) + 'n';
         if (typeof v === 'function') return '[Function ' + (v.name || 'anonymous') + ']';
         if (v && typeof v === 'object') {
@@ -62,11 +66,15 @@ pub fn inspector_init_script() -> &'static str {
       var first = arguments.length > 0 ? arguments[0] : null;
       var isInternalIpc = typeof first === 'string' && first.indexOf(IPC_PREFIX) === 0;
       if (!isInternalIpc && !sending) {
-        var parts = [];
-        for (var i = 0; i < arguments.length; i++) {
-          parts.push(formatValue(arguments[i], 0));
+        var now = Date.now();
+        if (now - burstStart > 100) { burstStart = now; burstCount = 0; }
+        if (level === 'error' || ++burstCount <= 20) {
+          var parts = [];
+          for (var i = 0; i < arguments.length; i++) {
+            parts.push(formatValue(arguments[i], 0));
+          }
+          post({ kind: 'console', level: level, text: parts.join(' ') });
         }
-        post({ kind: 'console', level: level, text: parts.join(' ') });
       }
       return orig.apply(console, arguments);
     };

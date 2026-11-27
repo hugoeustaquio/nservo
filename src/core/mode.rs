@@ -7,6 +7,7 @@ pub enum Mode {
     Normal,
     Insert,
     Command,
+    Search,
     Hint,
 }
 
@@ -17,6 +18,7 @@ impl Mode {
             Self::Normal => "NORMAL",
             Self::Insert => "INSERT",
             Self::Command => "COMMAND",
+            Self::Search => "SEARCH",
             Self::Hint => "HINT",
         }
     }
@@ -27,6 +29,7 @@ impl Mode {
             Self::Normal => "mode-normal",
             Self::Insert => "mode-insert",
             Self::Command => "mode-command",
+            Self::Search => "mode-search",
             Self::Hint => "mode-hint",
         }
     }
