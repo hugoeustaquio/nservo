@@ -1,7 +1,10 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use crate::core::{BrowserConfig, SHORTCUT_SPECS, default_config_path};
+use crate::core::{
+    BrowserConfig, InstalledPlugin, SHORTCUT_SPECS, default_config_path, default_plugins_dir,
+    discover_plugins,
+};
 
 /// Built-in URL for the interactive configuration & keyboard-shortcuts editor.
 pub const CONFIG_PAGE_URL: &str = "about:config";
@@ -9,13 +12,18 @@ pub const CONFIG_PAGE_URL: &str = "about:config";
 /// `UserContentManager` script message handler used by `about:config`.
 pub const CONFIG_MESSAGE_HANDLER: &str = "nservoConfig";
 
-/// Render `about:config` for the currently active `config` and `default_config_path()`.
+/// Render `about:config` for the currently active `config`, installed plugins, and default config path.
 pub fn render_default_config_html(config: &BrowserConfig) -> String {
-    render_config_html(config, &default_config_path())
+    let plugins = discover_plugins(&default_plugins_dir());
+    render_config_html(config, &default_config_path(), &plugins)
 }
 
 /// Render the Tokyo Night-styled interactive `about:config` HTML page.
-pub fn render_config_html(config: &BrowserConfig, config_path: &Path) -> String {
+pub fn render_config_html(
+    config: &BrowserConfig,
+    config_path: &Path,
+    plugins: &[InstalledPlugin],
+) -> String {
     let path_html = escape_html(&config_path.display().to_string());
     let mut rows = String::new();
     let mut last_cat = "";
@@ -48,6 +56,29 @@ pub fn render_config_html(config: &BrowserConfig, config_path: &Path) -> String 
   <td class="val-col"><input class="key-input" type="text" maxlength="2" data-id="{id}" data-default="{def}" value="{cur}"></td>
 </tr>"#
         );
+    }
+
+    if !plugins.is_empty() {
+        rows.push_str(r#"<tr class="cat-row"><td colspan="4">Plugins</td></tr>"#);
+        for p in plugins {
+            let id = escape_html(&p.manifest.name);
+            let desc = escape_html(&p.manifest.description);
+            let def_raw = p.manifest.default_shortcut.as_deref().unwrap_or("");
+            let def = escape_html(def_raw);
+            let cur_raw = config.plugin_key_for(&p.manifest.name);
+            let cur = escape_html(cur_raw);
+            let modified_cls = if cur_raw != def_raw { " modified" } else { "" };
+            let search_key = escape_html(&format!("plugin {} {} {}", p.manifest.name, p.manifest.description, cur_raw).to_ascii_lowercase());
+            let _ = write!(
+                &mut rows,
+                r#"<tr class="cfg-row{modified_cls}" data-search="{search_key}">
+  <td class="id-col"><code>plugin:{id}</code></td>
+  <td class="desc-col">{desc}</td>
+  <td class="def-col"><code>{def}</code></td>
+  <td class="val-col"><input class="key-input plugin-key-input" type="text" maxlength="2" data-plugin="{id}" data-default="{def}" value="{cur}"></td>
+</tr>"#
+            );
+        }
     }
 
     format!(
@@ -129,11 +160,17 @@ pub fn render_config_html(config: &BrowserConfig, config_path: &Path) -> String 
   }}
   document.getElementById('save-btn').addEventListener('click', function() {{
     var map = {{}};
+    var pmap = {{}};
     var inputs = document.querySelectorAll('.key-input');
     for (var i = 0; i < inputs.length; i++) {{
-      map[inputs[i].dataset.id] = inputs[i].value.trim();
+      var val = inputs[i].value.trim();
+      if (inputs[i].dataset.plugin) {{
+        if (val) pmap[inputs[i].dataset.plugin] = val;
+      }} else {{
+        map[inputs[i].dataset.id] = val;
+      }}
     }}
-    postConfig({{ action: 'save', keybindings: map }});
+    postConfig({{ action: 'save', keybindings: map, plugin_keybindings: pmap }});
   }});
   document.getElementById('reset-btn').addEventListener('click', function() {{
     postConfig({{ action: 'reset' }});

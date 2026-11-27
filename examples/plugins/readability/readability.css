@@ -1,0 +1,112 @@
+html.nservo-readability-active,
+body.nservo-readability-active {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100vh !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  background: #1a1b26 !important;
+  color: #c0caf5 !important;
+  position: static !important;
+}
+
+body.nservo-readability-active > :not(#nservo-readability-overlay) {
+  display: none !important;
+}
+
+#nservo-readability-overlay {
+  display: block !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-height: 100vh !important;
+  background: #1a1b26;
+  color: #c0caf5;
+  padding: 2.5rem 1.5rem 6rem;
+  font-family: Georgia, "Noto Serif", serif;
+  font-size: 19px;
+  line-height: 1.75;
+}
+
+#nservo-readability-overlay .nservo-reader-article {
+  max-width: 68ch;
+  margin: 0 auto;
+}
+
+#nservo-readability-overlay .nservo-reader-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid #292e42;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: #787c99;
+}
+
+#nservo-readability-overlay .nservo-reader-topbar button {
+  background: #292e42;
+  color: #c0caf5;
+  border: 1px solid #3b4261;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+#nservo-readability-overlay .nservo-reader-topbar button:hover {
+  background: #3b4261;
+  color: #7aa2f7;
+}
+
+#nservo-readability-overlay h1 {
+  color: #7aa2f7;
+  font-size: 2rem;
+  line-height: 1.25;
+  margin: 0 0 1.5rem;
+}
+
+#nservo-readability-overlay h2,
+#nservo-readability-overlay h3 {
+  color: #bb9af7;
+  margin-top: 2rem;
+  line-height: 1.35;
+}
+
+#nservo-readability-overlay a {
+  color: #7dcfff;
+}
+
+#nservo-readability-overlay pre,
+#nservo-readability-overlay code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.86em;
+  background: #24283b;
+  border-radius: 4px;
+}
+
+#nservo-readability-overlay pre {
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+
+#nservo-readability-overlay code {
+  padding: 0.1rem 0.3rem;
+}
+
+#nservo-readability-overlay blockquote {
+  margin: 1.4rem 0;
+  padding: 0.25rem 1rem;
+  border-left: 3px solid #7aa2f7;
+  color: #a9b1d6;
+}
+
+#nservo-readability-overlay img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}

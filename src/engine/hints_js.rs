@@ -28,13 +28,6 @@ pub fn activate_hints_script(new_tab: bool) -> String {
     }}
   }}
 
-  function flushFrame(target) {{
-    if (!target) return;
-    void target.offsetHeight;
-    setTimeout(function () {{ target.style.outline = '1px solid transparent'; }}, 25);
-    setTimeout(function () {{ target.style.outline = ''; }}, 75);
-  }}
-
   var selector = {new_tab_js}
     ? 'a[href],area[href]'
     : [
@@ -165,7 +158,6 @@ pub fn activate_hints_script(new_tab: bool) -> String {
   var host = document.body || document.documentElement;
   host.appendChild(container);
   window.__nservoHints = items;
-  flushFrame(host);
   notify({{ event: 'shown', count: items.length }});
 }})();"#
     )
@@ -179,7 +171,6 @@ pub fn filter_hints_script(typed: &str) -> String {
   var OVERLAY_ID = '__nservo_hint_overlay__';
   var typed = {typed_json};
   var items = window.__nservoHints || [];
-  var host = document.body || document.documentElement;
 
   function notify(payload) {{
     if (window.servoGtk && window.servoGtk.messageHandlers && window.servoGtk.messageHandlers.nservoHints) {{
@@ -187,18 +178,10 @@ pub fn filter_hints_script(typed: &str) -> String {
     }}
   }}
 
-  function flushFrame() {{
-    if (!host) return;
-    void host.offsetHeight;
-    setTimeout(function () {{ host.style.outline = '1px solid transparent'; }}, 25);
-    setTimeout(function () {{ host.style.outline = ''; }}, 75);
-  }}
-
   function clearAll() {{
     var overlay = document.getElementById(OVERLAY_ID);
     if (overlay) overlay.remove();
     window.__nservoHints = [];
-    flushFrame();
   }}
 
   function isTextInput(el) {{
@@ -261,8 +244,6 @@ pub fn filter_hints_script(typed: &str) -> String {
     notify({{ event: 'cancelled' }});
     return;
   }}
-
-  flushFrame();
 }})();"#
     )
 }
@@ -274,10 +255,5 @@ pub fn clear_hints_script() -> &'static str {
   if (overlay) overlay.remove();
   window.__nservoHints = [];
   window.__nservoHintsNewTab = false;
-  var host = document.body || document.documentElement;
-  if (!host) return;
-  void host.offsetHeight;
-  setTimeout(function () { host.style.outline = '1px solid transparent'; }, 25);
-  setTimeout(function () { host.style.outline = ''; }, 75);
 })();"#
 }

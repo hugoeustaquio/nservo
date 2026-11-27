@@ -245,21 +245,6 @@ impl WebTab {
         self.dispatch_or_queue(LoadTarget::Html(html.to_string()));
     }
 
-    /// Trigger a lightweight compositor frame after a page finishes loading so
-    /// static documents flush through `servo-gtk`'s rendering pipeline without
-    /// waiting for user input.
-    pub fn nudge_repaint(&self) {
-        self.view.evaluate_javascript(
-            "requestAnimationFrame(function() {\
-                var el = document.documentElement;\
-                if (!el) return;\
-                var prev = el.style.opacity;\
-                el.style.opacity = '0.999';\
-                requestAnimationFrame(function() { el.style.opacity = prev; });\
-            });",
-        );
-    }
-
     /// Handle Servo's `LoadEvent::Finished`, dispatching any queued initial or
     /// dropped fallback load. Returns `true` if a load was just dispatched.
     pub fn on_load_finished(&self, current_uri: Option<&str>) -> bool {

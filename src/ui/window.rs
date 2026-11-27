@@ -12,6 +12,7 @@ use crate::ui::hint_controller::HintController;
 use crate::ui::history_controller::HistoryController;
 use crate::ui::inspector_panel::{InspectorCallbacks, InspectorPanel};
 use crate::ui::key_handler::{KeyCallbacks, KeyHandler};
+use crate::ui::plugin_controller::PluginController;
 use crate::ui::search_controller::SearchController;
 use crate::ui::session_controller::SessionController;
 use crate::ui::status_bar::{StatusBar, StatusSnapshot};
@@ -40,6 +41,7 @@ pub struct BrowserWindow {
     pub(super) bookmarks: BookmarkController,
     pub(super) history: HistoryController,
     pub(super) adblock: AdblockController,
+    pub(super) plugins: PluginController,
     pub(super) hints: HintController,
     pub(super) search: SearchController,
     pub(super) mode: Rc<Cell<Mode>>,
@@ -59,7 +61,9 @@ impl BrowserWindow {
         window.add_css_class("nservo-window");
 
         let mode = Rc::new(Cell::new(Mode::Normal));
-        let config = BrowserConfig::load_default();
+        let plugins = PluginController::new();
+        let mut config = BrowserConfig::load_default();
+        config.apply_plugin_defaults(&plugins.installed());
         let key_handler = KeyHandler::new(mode.clone(), config.clone());
         let status_bar = StatusBar::new();
 
@@ -168,6 +172,7 @@ impl BrowserWindow {
             bookmarks: BookmarkController::new(),
             history: HistoryController::new(),
             adblock: AdblockController::new(),
+            plugins,
             hints: HintController::new(),
             search: SearchController::new(),
             mode,
@@ -199,23 +204,17 @@ impl BrowserWindow {
             .open_initial_tabs(&controller.tab_view, initial_url);
     }
 
-    fn attach_key_handler(self: &Rc<Self>) {
+    pub(super) fn attach_key_handler(self: &Rc<Self>) {
         let on_action_ctrl = self.clone();
         let on_pending_ctrl = self.clone();
         let cmd_bar = self.command_bar.clone();
         let inspector = self.inspector.clone();
-
-        self.key_handler.attach(
-            &self.window,
-            KeyCallbacks {
-                on_action: Rc::new(move |action| on_action_ctrl.handle_action(action)),
-                on_pending_changed: Rc::new(move |pending| {
-                    on_pending_ctrl.set_pending_display(pending);
-                }),
-                is_command_entry_empty: Rc::new(move || cmd_bar.is_entry_empty()),
-                is_inspector_focused: Rc::new(move || inspector.has_focus_within()),
-            },
-        );
+        self.key_handler.attach(&self.window, KeyCallbacks {
+            on_action: Rc::new(move |action| on_action_ctrl.handle_action(action)),
+            on_pending_changed: Rc::new(move |pending| on_pending_ctrl.set_pending_display(pending)),
+            is_command_entry_empty: Rc::new(move || cmd_bar.is_entry_empty()),
+            is_inspector_focused: Rc::new(move || inspector.has_focus_within()),
+        });
     }
 
     pub(super) fn set_pending_display(&self, pending: Option<String>) {
@@ -223,7 +222,7 @@ impl BrowserWindow {
         self.status_bar.set_pending_keys(pending.as_deref());
     }
 
-    fn submit_prompt(&self, raw: &str) {
+    pub(super) fn submit_prompt(self: &Rc<Self>, raw: &str) {
         let mode = self.mode.get();
         self.set_mode(Mode::Normal);
         if mode == Mode::Search {

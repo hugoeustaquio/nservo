@@ -12,6 +12,7 @@ pub enum CompletionKind {
     Bookmark,
     History,
     Session,
+    Plugin,
 }
 
 impl CompletionKind {
@@ -21,6 +22,7 @@ impl CompletionKind {
             Self::Bookmark => "BM",
             Self::History => "HIST",
             Self::Session => "SESS",
+            Self::Plugin => "PLUG",
         }
     }
 }
@@ -29,11 +31,8 @@ impl CompletionKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompletionItem {
     pub kind: CompletionKind,
-    /// Primary text shown in the row (command name, URL, or session name).
     pub primary: String,
-    /// Secondary label shown beside the primary text (description or page title).
     pub secondary: String,
-    /// Full command-bar text inserted when this item is selected.
     pub insert_text: String,
 }
 
@@ -43,6 +42,7 @@ pub struct CompletionSources {
     pub bookmarks: Vec<Bookmark>,
     pub history: Vec<HistoryEntry>,
     pub sessions: Vec<String>,
+    pub plugins: Vec<(String, String)>,
 }
 
 struct CommandSpec {
@@ -75,6 +75,10 @@ const COMMAND_SPECS: &[CommandSpec] = &[
     CommandSpec { name: "history-clear", takes_arg: false, description: "Clear all saved history" },
     CommandSpec { name: "adblock", takes_arg: true, description: "Download ABP filter list from URL" },
     CommandSpec { name: "adblock-update", takes_arg: false, description: "Update saved adblock filter lists" },
+    CommandSpec { name: "plugin", takes_arg: true, description: "Run an installed plugin" },
+    CommandSpec { name: "plugin-install", takes_arg: true, description: "Install plugin from GitHub/Git URL" },
+    CommandSpec { name: "plugin-update", takes_arg: false, description: "Update installed plugins via git pull" },
+    CommandSpec { name: "plugin-remove", takes_arg: true, description: "Remove an installed plugin" },
     CommandSpec { name: "config", takes_arg: false, description: "Open settings & shortcuts (about:config)" },
     CommandSpec { name: "help", takes_arg: false, description: "Open keyboard & command reference" },
     CommandSpec { name: "quit", takes_arg: false, description: "Quit nservo" },
@@ -98,11 +102,8 @@ pub fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
 }
 
 fn score_token(token: &[char], cand: &[char], cand_lower: &str) -> Option<i32> {
-    let mut score = 0i32;
-    let mut pos = 0usize;
-    let mut streak = 0i32;
-    let mut first_match = None;
-    let mut prev_idx: Option<usize> = None;
+    let (mut score, mut pos, mut streak, mut first_match, mut prev_idx): (i32, usize, i32, Option<usize>, Option<usize>) =
+        (0, 0, 0, None, None);
 
     for &needle in token {
         let mut found = None;
@@ -115,35 +116,22 @@ fn score_token(token: &[char], cand: &[char], cand_lower: &str) -> Option<i32> {
             pos += 1;
         }
         let idx = found?;
-        if first_match.is_none() {
-            first_match = Some(idx);
-        }
+        if first_match.is_none() { first_match = Some(idx); }
         if let Some(prev) = prev_idx {
-            if idx == prev + 1 {
-                streak += 1;
-            } else {
+            if idx == prev + 1 { streak += 1; } else {
                 streak = 1;
                 score -= ((idx - prev - 1).min(24)) as i32;
             }
-        } else {
-            streak = 1;
-        }
+        } else { streak = 1; }
         prev_idx = Some(idx);
         score += 12 + streak * 5;
-        if idx == 0 || is_boundary(cand[idx - 1]) {
-            score += 14;
-        }
+        if idx == 0 || is_boundary(cand[idx - 1]) { score += 14; }
     }
 
     let token_str: String = token.iter().collect();
-    if cand_lower.starts_with(&token_str) {
-        score += 35;
-    } else if cand_lower.contains(&token_str) {
-        score += 20;
-    }
-    if let Some(start) = first_match {
-        score -= (start.min(80) as i32) / 3;
-    }
+    if cand_lower.starts_with(&token_str) { score += 35; }
+    else if cand_lower.contains(&token_str) { score += 20; }
+    if let Some(start) = first_match { score -= (start.min(80) as i32) / 3; }
     Some(score)
 }
 
@@ -153,138 +141,113 @@ fn is_boundary(prev: char) -> bool {
 
 /// Produce ranked fzf-style completions for the current `:` command-bar `input`.
 pub fn complete_command_input(input: &str, sources: &CompletionSources) -> Vec<CompletionItem> {
-    let raw = input.strip_prefix(':').unwrap_or(input);
-    let trimmed_start = raw.trim_start();
-
+    let trimmed_start = input.strip_prefix(':').unwrap_or(input).trim_start();
     if let Some((cmd, rest)) = split_command_and_arg(trimmed_start) {
         return match cmd {
-            "open" | "o" | "Open" | "O" | "tabopen" | "tabnew" => {
-                complete_urls(cmd, rest, sources)
-            }
+            "open" | "o" | "Open" | "O" | "tabopen" | "tabnew" => complete_urls(cmd, rest, sources),
             "session" | "w" | "write" | "wq" => complete_sessions(cmd, rest, &sources.sessions),
+            "plugin" | "plug" | "plugin-update" | "plugin-remove" => {
+                complete_plugins(cmd, rest, &sources.plugins)
+            }
             _ => Vec::new(),
         };
     }
-
     complete_commands(trimmed_start)
 }
 
 fn split_command_and_arg(text: &str) -> Option<(&str, &str)> {
     let idx = text.find(char::is_whitespace)?;
     let cmd = &text[..idx];
-    let rest = text[idx..].trim_start();
-    (!cmd.is_empty()).then_some((cmd, rest))
+    (!cmd.is_empty()).then_some((cmd, text[idx..].trim_start()))
 }
 
 fn complete_commands(query: &str) -> Vec<CompletionItem> {
-    let mut scored: Vec<(i32, usize, CompletionItem)> = Vec::new();
+    let mut scored = Vec::new();
     for (order, spec) in COMMAND_SPECS.iter().enumerate() {
         let score = if let Some(mut name_score) = fuzzy_score(query, spec.name) {
             name_score += 80;
-            if !query.is_empty() && spec.name.starts_with(query) {
-                name_score += 60;
-            } else if !query.is_empty() && spec.name.to_ascii_lowercase().starts_with(&query.to_ascii_lowercase()) {
+            if !query.is_empty() && spec.name.starts_with(query) { name_score += 60; }
+            else if !query.is_empty() && spec.name.to_ascii_lowercase().starts_with(&query.to_ascii_lowercase()) {
                 name_score += 40;
             }
             name_score
         } else if let Some(desc_score) = fuzzy_score(query, spec.description) {
             desc_score
-        } else {
-            continue;
-        };
-        let insert_text = if spec.takes_arg {
-            format!("{} ", spec.name)
-        } else {
-            spec.name.to_string()
-        };
-        scored.push((
-            score,
-            order,
-            CompletionItem {
-                kind: CompletionKind::Command,
-                primary: spec.name.to_string(),
-                secondary: spec.description.to_string(),
-                insert_text,
-            },
-        ));
+        } else { continue; };
+        let insert_text = if spec.takes_arg { format!("{} ", spec.name) } else { spec.name.to_string() };
+        scored.push((score, order, CompletionItem {
+            kind: CompletionKind::Command,
+            primary: spec.name.to_string(),
+            secondary: spec.description.to_string(),
+            insert_text,
+        }));
     }
     sort_and_take(scored)
 }
 
 fn score_url_entry(query: &str, url: &str, title: &str) -> Option<i32> {
-    let clean_url = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(url);
-    let best_single = [fuzzy_score(query, clean_url), fuzzy_score(query, title)]
-        .into_iter()
-        .flatten()
-        .max();
-    if let Some(score) = best_single {
+    let clean_url = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")).unwrap_or(url);
+    if let Some(score) = [fuzzy_score(query, clean_url), fuzzy_score(query, title)].into_iter().flatten().max() {
         return Some(score + 20);
     }
-    let combined = format!("{clean_url} {title}");
-    fuzzy_score(query, &combined)
+    fuzzy_score(query, &format!("{clean_url} {title}"))
 }
 
 fn complete_urls(cmd: &str, query: &str, sources: &CompletionSources) -> Vec<CompletionItem> {
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut scored: Vec<(i32, usize, CompletionItem)> = Vec::new();
+    let mut seen = HashSet::new();
+    let mut scored = Vec::new();
     let mut order = 0usize;
 
     for bm in &sources.bookmarks {
-        if seen.insert(bm.url.clone())
-            && let Some(score) = score_url_entry(query, &bm.url, &bm.title)
-        {
-            scored.push((
-                score + 18,
-                order,
-                CompletionItem {
-                    kind: CompletionKind::Bookmark,
-                    primary: bm.url.clone(),
-                    secondary: bm.title.clone(),
-                    insert_text: format!("{cmd} {}", bm.url),
-                },
-            ));
+        if seen.insert(bm.url.clone()) && let Some(score) = score_url_entry(query, &bm.url, &bm.title) {
+            scored.push((score + 18, order, CompletionItem {
+                kind: CompletionKind::Bookmark,
+                primary: bm.url.clone(),
+                secondary: bm.title.clone(),
+                insert_text: format!("{cmd} {}", bm.url),
+            }));
             order += 1;
         }
     }
-
     for entry in &sources.history {
-        if seen.insert(entry.url.clone())
-            && let Some(score) = score_url_entry(query, &entry.url, &entry.title)
-        {
-            scored.push((
-                score,
-                order,
-                CompletionItem {
-                    kind: CompletionKind::History,
-                    primary: entry.url.clone(),
-                    secondary: entry.title.clone(),
-                    insert_text: format!("{cmd} {}", entry.url),
-                },
-            ));
+        if seen.insert(entry.url.clone()) && let Some(score) = score_url_entry(query, &entry.url, &entry.title) {
+            scored.push((score, order, CompletionItem {
+                kind: CompletionKind::History,
+                primary: entry.url.clone(),
+                secondary: entry.title.clone(),
+                insert_text: format!("{cmd} {}", entry.url),
+            }));
             order += 1;
         }
     }
-
     sort_and_take(scored)
 }
 
 fn complete_sessions(cmd: &str, query: &str, sessions: &[String]) -> Vec<CompletionItem> {
-    let mut scored: Vec<(i32, usize, CompletionItem)> = Vec::new();
+    let mut scored = Vec::new();
     for (order, name) in sessions.iter().enumerate() {
         if let Some(score) = fuzzy_score(query, name) {
-            scored.push((
-                score,
-                order,
-                CompletionItem {
-                    kind: CompletionKind::Session,
-                    primary: name.clone(),
-                    secondary: "Saved session".to_string(),
-                    insert_text: format!("{cmd} {name}"),
-                },
-            ));
+            scored.push((score, order, CompletionItem {
+                kind: CompletionKind::Session,
+                primary: name.clone(),
+                secondary: "Saved session".to_string(),
+                insert_text: format!("{cmd} {name}"),
+            }));
+        }
+    }
+    sort_and_take(scored)
+}
+
+fn complete_plugins(cmd: &str, query: &str, plugins: &[(String, String)]) -> Vec<CompletionItem> {
+    let mut scored = Vec::new();
+    for (order, (name, desc)) in plugins.iter().enumerate() {
+        if let Some(score) = fuzzy_score(query, name).or_else(|| fuzzy_score(query, desc)) {
+            scored.push((score, order, CompletionItem {
+                kind: CompletionKind::Plugin,
+                primary: name.clone(),
+                secondary: desc.clone(),
+                insert_text: format!("{cmd} {name}"),
+            }));
         }
     }
     sort_and_take(scored)

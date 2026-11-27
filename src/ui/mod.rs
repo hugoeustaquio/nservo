@@ -11,6 +11,7 @@ mod inspector_views;
 mod key_chords;
 pub mod key_handler;
 mod page_overlay;
+pub mod plugin_controller;
 pub mod search_controller;
 pub mod session_controller;
 pub mod status_bar;

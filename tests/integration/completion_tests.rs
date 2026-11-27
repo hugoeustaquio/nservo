@@ -35,6 +35,7 @@ fn sample_sources() -> CompletionSources {
             },
         ],
         sessions: vec!["default".to_string(), "work".to_string(), "reading".to_string()],
+        plugins: Vec::new(),
     }
 }
 

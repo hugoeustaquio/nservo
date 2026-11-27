@@ -139,6 +139,10 @@ Press `:` to open the command bar and run Ex-style commands:
 | `:history-clear` | `:histclear` | Clear all saved browsing history |
 | `:adblock <URL>` | — | Download an ABP-like filter list into `$XDG_CONFIG_HOME/nservo/adblock/` |
 | `:adblock-update` | — | Re-download all saved adblock filter lists and reload rules |
+| `:plugin <name> [args]` | `:plug` | Run an installed plugin from `$XDG_CONFIG_HOME/nservo/plugins/` |
+| `:plugin-install <repo>` | — | Install a plugin from GitHub (`owner/repo`) or a Git URL |
+| `:plugin-update [name]` | — | Update one or all installed plugins via `git pull` |
+| `:plugin-remove <name>` | — | Remove an installed plugin |
 | `:config` | — | Open interactive settings & keyboard shortcuts page (`about:config`) |
 | `:help` | `:h` | Open the built-in keyboard & command reference page |
 | `:q` | `:quit`, `:qa` | Quit `nservo` |
@@ -182,6 +186,12 @@ Restart `nservo` after editing `style.css` to apply your changes.
 ### Custom Keyboard Shortcuts (`config.json` & `about:config`)
 
 Normal-mode keyboard shortcuts can be customized either by editing `$XDG_CONFIG_HOME/nservo/config.json` (fallback: `$HOME/.config/nservo/config.json`) directly or interactively inside the browser at **`about:config`** (via `:config` or `:open about:config`). Saving in `about:config` validates bindings (1–2 characters, no duplicates or prefix collisions), persists them to `config.json`, and applies them immediately without restarting `nservo`.
+
+### Plugins (`$XDG_CONFIG_HOME/nservo/plugins/`)
+
+`nservo` supports a zero-idle-overhead plugin system (`page_js` for direct SpiderMonkey DOM/CSS plugins like Readability, and `exec` for native CLI/binary integrations like password managers). Install from GitHub with `:plugin-install owner/repo`, update with `:plugin-update`, and bind shortcuts in `about:config`.
+
+See [plugins.md](plugins.md) for the full plugin specification and bundled examples (`examples/plugins/readability` and `examples/plugins/pass-fill`).
 
 ### Custom Start Page (`startpage.html`)
 

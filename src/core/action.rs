@@ -77,6 +77,12 @@ pub enum BrowserAction {
     AddAdblockList(String),
     UpdateAdblockLists,
 
+    /// Plugin management & execution actions (`:plugin`, `:plugin-install`, `:plugin-update`).
+    RunPlugin { name: String, args: String },
+    InstallPlugin(String),
+    UpdatePlugins(Option<String>),
+    RemovePlugin(String),
+
     /// Exit the browser application.
     Quit,
 }

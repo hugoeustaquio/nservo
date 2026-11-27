@@ -91,7 +91,6 @@ pub(super) fn wire_tab_signals(
                     title: v.title().unwrap_or_default(),
                 });
             }
-            tab.nudge_repaint();
         }
         let loading = matches!(event, LoadEvent::Started);
         m.borrow_mut().set_loading(id, loading);

@@ -115,18 +115,19 @@ fn about_config_renders_options_and_parses_save_and_reset_messages() {
     let mut cfg = BrowserConfig::default();
     cfg.keybindings.insert("close_tab".to_string(), "x".to_string());
 
-    let html = render_config_html(&cfg, &path);
+    let html = render_config_html(&cfg, &path, &[]);
     assert!(html.contains("/tmp/xdg/nservo/config.json"));
     assert!(html.contains(CONFIG_MESSAGE_HANDLER));
     assert!(html.contains(r#"data-id="close_tab""#));
     assert!(html.contains(r#"value="x""#));
     assert!(config_feedback_script(true, "Saved").contains("__nservoConfigStatus(true, \"Saved\")"));
 
-    let save_msg = r#"{"action":"save","keybindings":{"close_tab":"x"}}"#;
+    let save_msg = r#"{"action":"save","keybindings":{"close_tab":"x"},"plugin_keybindings":{"readability":"zr"}}"#;
     match parse_config_message(save_msg) {
         Some(ConfigEvent::Save(parsed)) => {
             assert_eq!(parsed.key_for("close_tab"), "x");
             assert_eq!(parsed.key_for("scroll_down"), "j");
+            assert_eq!(parsed.plugin_key_for("readability"), "zr");
         }
         other => panic!("expected Save event, got {other:?}"),
     }
@@ -136,7 +137,7 @@ fn about_config_renders_options_and_parses_save_and_reset_messages() {
     // Partial on-disk config merges cleanly with defaults.
     let mut partial = BTreeMap::new();
     partial.insert("close_tab".to_string(), "x".to_string());
-    let merged = BrowserConfig::merge_with_defaults(partial);
+    let merged = BrowserConfig::merge_with_defaults(partial, BTreeMap::new());
     assert_eq!(merged.key_for("close_tab"), "x");
     assert_eq!(merged.key_for("reload"), "r");
 }

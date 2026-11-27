@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::core::plugins::InstalledPlugin;
 use crate::core::{BrowserAction, Mode, default_config_path};
 
 /// Metadata describing one customizable Normal-mode keyboard shortcut.
@@ -52,6 +53,8 @@ pub const SHORTCUT_SPECS: &[ShortcutSpec] = &[
 pub struct BrowserConfig {
     #[serde(default)]
     pub keybindings: BTreeMap<String, String>,
+    #[serde(default)]
+    pub plugin_keybindings: BTreeMap<String, String>,
 }
 
 impl Default for BrowserConfig {
@@ -60,35 +63,30 @@ impl Default for BrowserConfig {
         for spec in SHORTCUT_SPECS {
             keybindings.insert(spec.id.to_string(), spec.default_key.to_string());
         }
-        Self { keybindings }
+        Self {
+            keybindings,
+            plugin_keybindings: BTreeMap::new(),
+        }
     }
 }
 
 impl BrowserConfig {
-    /// Load configuration from `$XDG_CONFIG_HOME/nservo/config.json`, falling
-    /// back cleanly to defaults if missing or invalid.
     pub fn load_default() -> Self {
         Self::load(&default_config_path())
     }
 
-    /// Load configuration from `path`, filling any missing keys from defaults.
     pub fn load(path: &Path) -> Self {
-        let Ok(raw) = fs::read_to_string(path) else {
-            return Self::default();
-        };
-        let Ok(parsed) = serde_json::from_str::<BrowserConfig>(&raw) else {
-            return Self::default();
-        };
-        let merged = Self::merge_with_defaults(parsed.keybindings);
-        if merged.validate().is_ok() {
-            merged
-        } else {
-            Self::default()
-        }
+        let Ok(raw) = fs::read_to_string(path) else { return Self::default(); };
+        let Ok(parsed) = serde_json::from_str::<BrowserConfig>(&raw) else { return Self::default(); };
+        let merged = Self::merge_with_defaults(parsed.keybindings, parsed.plugin_keybindings);
+        if merged.validate().is_ok() { merged } else { Self::default() }
     }
 
-    /// Merge partial user keybindings onto defaults, dropping unknown action IDs.
-    pub fn merge_with_defaults(overrides: BTreeMap<String, String>) -> Self {
+    /// Merge partial user keybindings onto defaults, preserving valid plugin bindings.
+    pub fn merge_with_defaults(
+        overrides: BTreeMap<String, String>,
+        plugin_overrides: BTreeMap<String, String>,
+    ) -> Self {
         let mut cfg = Self::default();
         for spec in SHORTCUT_SPECS {
             if let Some(val) = overrides.get(spec.id) {
@@ -98,10 +96,33 @@ impl BrowserConfig {
                 }
             }
         }
+        for (name, val) in plugin_overrides {
+            let trimmed = val.trim();
+            if !trimmed.is_empty() {
+                cfg.plugin_keybindings.insert(name, trimmed.to_string());
+            }
+        }
         cfg
     }
 
-    /// Return the configured key sequence for `action_id`.
+    /// Fill missing `plugin_keybindings` from installed plugins' `default_shortcut`
+    /// only when the default does not conflict with existing bindings.
+    pub fn apply_plugin_defaults(&mut self, plugins: &[InstalledPlugin]) {
+        for p in plugins {
+            if self.plugin_keybindings.contains_key(&p.manifest.name) {
+                continue;
+            }
+            if let Some(def) = p.manifest.default_shortcut.as_deref() {
+                let trimmed = def.trim();
+                if trimmed.is_empty() { continue; }
+                self.plugin_keybindings.insert(p.manifest.name.clone(), trimmed.to_string());
+                if self.validate().is_err() {
+                    self.plugin_keybindings.remove(&p.manifest.name);
+                }
+            }
+        }
+    }
+
     pub fn key_for(&self, action_id: &str) -> &str {
         self.keybindings
             .get(action_id)
@@ -110,39 +131,48 @@ impl BrowserConfig {
             .unwrap_or("")
     }
 
-    /// Validate that all keybindings are 1- or 2-character sequences, do not start
-    /// with count digits `'1'..='9'`, and do not collide or shadow each other.
-    pub fn validate(&self) -> Result<(), String> {
-        let mut seen: HashMap<&str, &str> = HashMap::new();
-        let mut single_chars: HashMap<char, &str> = HashMap::new();
-        let mut prefixes: HashMap<char, &str> = HashMap::new();
+    pub fn plugin_key_for(&self, name: &str) -> &str {
+        self.plugin_keybindings.get(name).map(String::as_str).unwrap_or("")
+    }
 
-        for spec in SHORTCUT_SPECS {
-            let seq = self.key_for(spec.id);
+    /// Validate that all built-in and plugin keybindings are 1- or 2-char non-conflicting sequences.
+    pub fn validate(&self) -> Result<(), String> {
+        let mut seen: HashMap<&str, String> = HashMap::new();
+        let mut single_chars: HashMap<char, String> = HashMap::new();
+        let mut prefixes: HashMap<char, String> = HashMap::new();
+
+        let all_entries = SHORTCUT_SPECS
+            .iter()
+            .map(|s| (s.id.to_string(), self.key_for(s.id)))
+            .chain(
+                self.plugin_keybindings
+                    .iter()
+                    .map(|(k, v)| (format!("plugin:{k}"), v.as_str())),
+            );
+
+        for (label, seq) in all_entries {
             let chars: Vec<char> = seq.chars().collect();
             if chars.is_empty() || chars.len() > 2 {
-                return Err(format!("'{}' must be 1 or 2 characters (got '{seq}')", spec.id));
+                return Err(format!("'{label}' must be 1 or 2 characters (got '{seq}')"));
             }
             if chars.iter().any(|c| c.is_whitespace() || c.is_control()) {
-                return Err(format!("'{}' cannot contain whitespace or control chars", spec.id));
+                return Err(format!("'{label}' cannot contain whitespace or control chars"));
             }
             if matches!(chars[0], '1'..='9') {
-                return Err(format!("'{}' cannot start with digit '{}' (reserved for counts)", spec.id, chars[0]));
+                return Err(format!("'{label}' cannot start with digit '{}' (reserved for counts)", chars[0]));
             }
-            if let Some(other) = seen.insert(seq, spec.id) {
-                return Err(format!("Duplicate shortcut '{seq}' assigned to '{other}' and '{}'", spec.id));
+            if let Some(other) = seen.insert(seq, label.clone()) {
+                return Err(format!("Duplicate shortcut '{seq}' assigned to '{other}' and '{label}'"));
             }
             if chars.len() == 1 {
-                single_chars.insert(chars[0], spec.id);
+                single_chars.insert(chars[0], label);
             } else {
-                prefixes.insert(chars[0], spec.id);
+                prefixes.insert(chars[0], label);
             }
         }
         for (ch, single_id) in &single_chars {
             if let Some(seq_id) = prefixes.get(ch) {
-                return Err(format!(
-                    "Shortcut '{ch}' ('{single_id}') conflicts with prefix of '{seq_id}'"
-                ));
+                return Err(format!("Shortcut '{ch}' ('{single_id}') conflicts with prefix of '{seq_id}'"));
             }
         }
         Ok(())
@@ -171,7 +201,7 @@ impl BrowserConfig {
     /// Return the set of first characters that begin any 2-key sequence.
     pub fn sequence_prefixes(&self) -> HashSet<char> {
         let mut out = HashSet::new();
-        for seq in self.keybindings.values() {
+        for seq in self.keybindings.values().chain(self.plugin_keybindings.values()) {
             let mut chars = seq.chars();
             if let (Some(first), Some(_), None) = (chars.next(), chars.next(), chars.next()) {
                 out.insert(first);
@@ -182,12 +212,16 @@ impl BrowserConfig {
 
     /// Resolve a 1- or 2-character Normal-mode sequence to a [`BrowserAction`].
     pub fn resolve_action(&self, seq: &str, count: u32) -> Option<BrowserAction> {
-        let id = self
-            .keybindings
+        if let Some((id, _)) = self.keybindings.iter().find(|(_, k)| k.as_str() == seq) {
+            return action_for_id(id, count);
+        }
+        self.plugin_keybindings
             .iter()
             .find(|(_, k)| k.as_str() == seq)
-            .map(|(id, _)| id.as_str())?;
-        action_for_id(id, count)
+            .map(|(name, _)| BrowserAction::RunPlugin {
+                name: name.clone(),
+                args: String::new(),
+            })
     }
 }
 
@@ -240,11 +274,15 @@ pub fn parse_config_message(body: &str) -> Option<ConfigEvent> {
             let map = val.get("keybindings")?.as_object()?;
             let mut overrides = BTreeMap::new();
             for (k, v) in map {
-                if let Some(s) = v.as_str() {
-                    overrides.insert(k.clone(), s.to_string());
+                if let Some(s) = v.as_str() { overrides.insert(k.clone(), s.to_string()); }
+            }
+            let mut plug = BTreeMap::new();
+            if let Some(pmap) = val.get("plugin_keybindings").and_then(Value::as_object) {
+                for (k, v) in pmap {
+                    if let Some(s) = v.as_str() { plug.insert(k.clone(), s.to_string()); }
                 }
             }
-            Some(ConfigEvent::Save(BrowserConfig::merge_with_defaults(overrides)))
+            Some(ConfigEvent::Save(BrowserConfig::merge_with_defaults(overrides, plug)))
         }
         _ => None,
     }

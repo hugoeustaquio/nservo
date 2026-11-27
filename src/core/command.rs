@@ -78,6 +78,10 @@ pub fn parse_command(raw: &str) -> Result<BrowserAction, CommandError> {
         "history-clear" | "histclear" => Ok(BrowserAction::ClearHistory),
         "adblock" => parse_adblock_url_arg(rest).map(BrowserAction::AddAdblockList),
         "adblock-update" => Ok(BrowserAction::UpdateAdblockLists),
+        "plugin" | "plug" => parse_plugin_run_arg(rest),
+        "plugin-install" => parse_nonempty_arg(rest, ":plugin-install <owner/repo|git-url>").map(BrowserAction::InstallPlugin),
+        "plugin-update" => Ok(BrowserAction::UpdatePlugins((!rest.is_empty()).then(|| rest.to_string()))),
+        "plugin-remove" => parse_nonempty_arg(rest, ":plugin-remove <name>").map(BrowserAction::RemovePlugin),
         "q" | "quit" | "qa" => Ok(BrowserAction::Quit),
         other => Err(CommandError::UnknownCommand(other.to_string())),
     }
@@ -106,28 +110,33 @@ fn parse_required_session(arg: &str) -> Result<String, CommandError> {
 }
 
 fn parse_url_arg(arg: &str, usage: &'static str) -> Result<String, CommandError> {
-    if arg.is_empty() {
-        return Err(CommandError::MissingArgument(usage));
-    }
+    if arg.is_empty() { return Err(CommandError::MissingArgument(usage)); }
     Ok(normalize_url(arg))
 }
 
-fn parse_adblock_url_arg(arg: &str) -> Result<String, CommandError> {
+fn parse_nonempty_arg(arg: &str, usage: &'static str) -> Result<String, CommandError> {
+    if arg.is_empty() { return Err(CommandError::MissingArgument(usage)); }
+    Ok(arg.to_string())
+}
+
+fn parse_plugin_run_arg(arg: &str) -> Result<BrowserAction, CommandError> {
     if arg.is_empty() {
-        return Err(CommandError::MissingArgument(":adblock <URL>"));
+        return Err(CommandError::MissingArgument(":plugin <name> [args]"));
     }
+    let mut parts = arg.splitn(2, char::is_whitespace);
+    let name = parts.next().unwrap_or("").trim().to_string();
+    let args = parts.next().map(str::trim).unwrap_or("").to_string();
+    Ok(BrowserAction::RunPlugin { name, args })
+}
+
+fn parse_adblock_url_arg(arg: &str) -> Result<String, CommandError> {
+    if arg.is_empty() { return Err(CommandError::MissingArgument(":adblock <URL>")); }
     let normalized = normalize_url(arg);
-    if !starts_with_ascii_case(&normalized, "http://")
-        && !starts_with_ascii_case(&normalized, "https://")
-    {
-        return Err(CommandError::InvalidArgument(
-            "adblock URL must use http:// or https://",
-        ));
+    if !starts_with_ascii_case(&normalized, "http://") && !starts_with_ascii_case(&normalized, "https://") {
+        return Err(CommandError::InvalidArgument("adblock URL must use http:// or https://"));
     }
     if arg.chars().any(char::is_whitespace) {
-        return Err(CommandError::InvalidArgument(
-            "adblock URL must not contain spaces",
-        ));
+        return Err(CommandError::InvalidArgument("adblock URL must not contain spaces"));
     }
     Ok(normalized)
 }

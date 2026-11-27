@@ -22,6 +22,9 @@ pub const CONFIG_FILENAME: &str = "config.json";
 /// Subdirectory inside `$XDG_CONFIG_HOME/nservo/` holding ABP-like adblock filter lists.
 pub const ADBLOCK_DIRNAME: &str = "adblock";
 
+/// Subdirectory inside `$XDG_CONFIG_HOME/nservo/` holding installed plugins.
+pub const PLUGINS_DIRNAME: &str = "plugins";
+
 const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
     name TEXT PRIMARY KEY,
@@ -133,6 +136,19 @@ pub fn default_adblock_dir() -> PathBuf {
     let xdg = env::var("XDG_CONFIG_HOME").ok();
     let home = env::var("HOME").ok();
     resolve_adblock_dir(xdg.as_deref(), home.as_deref())
+}
+
+/// Resolve the installed plugins directory under `$XDG_CONFIG_HOME/nservo/plugins`
+/// (falling back to `$HOME/.config/nservo/plugins`).
+pub fn resolve_plugins_dir(xdg_config_home: Option<&str>, home: Option<&str>) -> PathBuf {
+    resolve_config_dir(xdg_config_home, home).join(PLUGINS_DIRNAME)
+}
+
+/// Default installed plugins directory resolved from process environment variables.
+pub fn default_plugins_dir() -> PathBuf {
+    let xdg = env::var("XDG_CONFIG_HOME").ok();
+    let home = env::var("HOME").ok();
+    resolve_plugins_dir(xdg.as_deref(), home.as_deref())
 }
 
 /// Resolve Servo's session data directory (cookies, cache, webstorage) under

@@ -242,6 +242,7 @@ fn build_completion_row(item: &CompletionItem) -> gtk::Box {
         CompletionKind::Bookmark => badge.add_css_class("kind-bm"),
         CompletionKind::History => badge.add_css_class("kind-hist"),
         CompletionKind::Session => badge.add_css_class("kind-sess"),
+        CompletionKind::Plugin => badge.add_css_class("kind-plug"),
         CompletionKind::Command => {}
     }
 

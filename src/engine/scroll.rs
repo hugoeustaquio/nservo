@@ -140,18 +140,9 @@ pub fn scroll_init_script() -> &'static str {
     animateTo(baseX + dx, baseY + dy);
   }
 
-  function nudgePaint() {
-    var el = document.documentElement;
-    if (!el) return;
-    var prev = el.style.opacity;
-    el.style.opacity = '0.999';
-    requestAnimationFrame(function() { el.style.opacity = prev; });
-  }
-
   function jumpTo(x, y) {
     stopAnim();
     instantScrollTo(x, y);
-    nudgePaint();
     scheduleReport(true);
   }
 

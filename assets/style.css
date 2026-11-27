@@ -158,6 +158,10 @@ button.tab-button.tab-active label {
     background-color: #bb9af7;
 }
 
+.completion-badge.kind-plug {
+    background-color: #e0af68;
+}
+
 .completion-primary {
     color: #c0caf5;
     font-weight: bold;
