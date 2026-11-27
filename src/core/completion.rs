@@ -73,20 +73,16 @@ const COMMAND_SPECS: &[CommandSpec] = &[
     CommandSpec { name: "bmdel", takes_arg: true, description: "Remove bookmark by index or URL" },
     CommandSpec { name: "history", takes_arg: false, description: "Open or filter browsing history" },
     CommandSpec { name: "history-clear", takes_arg: false, description: "Clear all saved history" },
+    CommandSpec { name: "adblock", takes_arg: true, description: "Download ABP filter list from URL" },
+    CommandSpec { name: "adblock-update", takes_arg: false, description: "Update saved adblock filter lists" },
     CommandSpec { name: "help", takes_arg: false, description: "Open keyboard & command reference" },
     CommandSpec { name: "quit", takes_arg: false, description: "Quit nservo" },
 ];
 
 /// Compute an fzf-style fuzzy match score for `query` against `candidate`.
-///
-/// Splits `query` on whitespace; every token must match `candidate` as a
-/// case-insensitive subsequence. Higher scores indicate tighter, earlier, and
-/// word-boundary-aligned matches. Returns `None` if any token fails to match.
 pub fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
     let trimmed = query.trim();
-    if trimmed.is_empty() {
-        return Some(0);
-    }
+    if trimmed.is_empty() { return Some(0); }
     let cand_chars: Vec<char> = candidate.chars().map(|c| c.to_ascii_lowercase()).collect();
     let cand_lower: String = cand_chars.iter().collect();
 
@@ -96,7 +92,6 @@ pub fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
         total += score_token(&tok_lower, &cand_chars, &cand_lower)?;
     }
 
-    // Mild preference for shorter candidates on equal match quality.
     total -= (cand_chars.len().min(200) as i32) / 8;
     Some(total)
 }

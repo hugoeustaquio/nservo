@@ -1,3 +1,4 @@
+pub mod adblock_fetch;
 pub mod bookmarks_page;
 pub mod clipboard;
 pub mod epoxy;

@@ -5,6 +5,7 @@ use gtk::prelude::*;
 
 use crate::core::{ConsoleStore, Mode, parse_command};
 use crate::engine::gpu::{self, RenderBackend};
+use crate::ui::adblock_controller::AdblockController;
 use crate::ui::bookmark_controller::BookmarkController;
 use crate::ui::command_bar::CommandBar;
 use crate::ui::hint_controller::HintController;
@@ -37,6 +38,7 @@ pub struct BrowserWindow {
     pub(super) sessions: SessionController,
     pub(super) bookmarks: BookmarkController,
     pub(super) history: HistoryController,
+    pub(super) adblock: AdblockController,
     pub(super) hints: HintController,
     pub(super) search: SearchController,
     pub(super) mode: Rc<Cell<Mode>>,
@@ -171,6 +173,7 @@ impl BrowserWindow {
             sessions: SessionController::new(),
             bookmarks: BookmarkController::new(),
             history: HistoryController::new(),
+            adblock: AdblockController::new(),
             hints: HintController::new(),
             search: SearchController::new(),
             mode,

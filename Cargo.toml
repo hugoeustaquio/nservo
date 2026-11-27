@@ -7,6 +7,11 @@ license = "BSD-3-Clause"
 readme = "README.md"
 repository = "https://github.com/hugoeustaquio/nservo"
 
+[[bin]]
+name = "nservo"
+path = "src/main.rs"
+test = false
+
 [dependencies]
 epoxy = "0.1.0"
 gio = "0.22"
@@ -31,13 +36,15 @@ epoxy = { git = "https://github.com/theCapypara/epoxy-rs", rev = "7d9d88a8dfec2d
 
 # Trim DWARF debug info and optimize all dependencies in dev builds so
 # ./target/debug/nservo runs Servo, servo-gtk, prost, and GTK at opt-level 2
-# while nservo itself stays unoptimized for fast incremental rebuilds.
+# without upstream Servo debug_assert! panics (e.g. GetBoundingClientRect on
+# Google), while nservo itself stays unoptimized for fast incremental rebuilds.
 [profile.dev]
 debug = "line-tables-only"
 
 [profile.dev.package."*"]
 opt-level = 2
 debug = false
+debug-assertions = false
 
 [profile.release]
 lto = "thin"

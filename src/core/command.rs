@@ -75,6 +75,8 @@ pub fn parse_command(raw: &str) -> Result<BrowserAction, CommandError> {
             (!rest.is_empty()).then(|| rest.to_string()),
         )),
         "history-clear" | "histclear" => Ok(BrowserAction::ClearHistory),
+        "adblock" => parse_adblock_url_arg(rest).map(BrowserAction::AddAdblockList),
+        "adblock-update" => Ok(BrowserAction::UpdateAdblockLists),
         "q" | "quit" | "qa" => Ok(BrowserAction::Quit),
         other => Err(CommandError::UnknownCommand(other.to_string())),
     }
@@ -107,6 +109,26 @@ fn parse_url_arg(arg: &str, usage: &'static str) -> Result<String, CommandError>
         return Err(CommandError::MissingArgument(usage));
     }
     Ok(normalize_url(arg))
+}
+
+fn parse_adblock_url_arg(arg: &str) -> Result<String, CommandError> {
+    if arg.is_empty() {
+        return Err(CommandError::MissingArgument(":adblock <URL>"));
+    }
+    let normalized = normalize_url(arg);
+    if !starts_with_ascii_case(&normalized, "http://")
+        && !starts_with_ascii_case(&normalized, "https://")
+    {
+        return Err(CommandError::InvalidArgument(
+            "adblock URL must use http:// or https://",
+        ));
+    }
+    if arg.chars().any(char::is_whitespace) {
+        return Err(CommandError::InvalidArgument(
+            "adblock URL must not contain spaces",
+        ));
+    }
+    Ok(normalized)
 }
 
 fn parse_zoom_arg(arg: &str) -> Result<BrowserAction, CommandError> {

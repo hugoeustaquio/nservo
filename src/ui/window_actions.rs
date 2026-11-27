@@ -149,6 +149,12 @@ impl BrowserWindow {
             BrowserAction::ClearHistory => {
                 self.history.clear(&self.tab_view, &self.status_bar);
             }
+            BrowserAction::AddAdblockList(url) => {
+                self.adblock.add_list(&url, &self.tab_view, &self.status_bar);
+            }
+            BrowserAction::UpdateAdblockLists => {
+                self.adblock.update_lists(&self.tab_view, &self.status_bar);
+            }
             BrowserAction::Quit => self.window.close(),
         }
     }

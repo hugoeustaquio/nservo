@@ -72,6 +72,10 @@ pub enum BrowserAction {
     ShowHistory(Option<String>),
     ClearHistory,
 
+    /// Adblock filter-list management actions (`:adblock <URL>`, `:adblock-update`).
+    AddAdblockList(String),
+    UpdateAdblockLists,
+
     /// Exit the browser application.
     Quit,
 }

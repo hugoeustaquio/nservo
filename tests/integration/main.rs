@@ -3,6 +3,7 @@
 //! Keeping these modules under a single `tests/integration/main.rs` binary
 //! avoids linking a separate copy of `libnservo` + Servo for each test file.
 
+mod adblock_tests;
 mod bookmarks_tests;
 mod command_tests;
 mod completion_tests;

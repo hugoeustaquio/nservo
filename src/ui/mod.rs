@@ -1,3 +1,4 @@
+pub mod adblock_controller;
 pub mod bookmark_controller;
 pub mod command_bar;
 pub mod hint_controller;

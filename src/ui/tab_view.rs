@@ -208,8 +208,12 @@ impl TabView {
     }
 
     pub fn focus_active(&self) {
-        if let Some(view) = self.active_web_view() {
-            view.grab_focus();
+        if let Some(view) = self.active_web_view() { view.grab_focus(); }
+    }
+
+    pub fn reload_adblock(&self, dir: &str) {
+        for entry in self.tabs.borrow().values() {
+            entry.tab.reload_adblock(dir);
         }
     }
 

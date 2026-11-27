@@ -6,7 +6,9 @@ use gtk::glib;
 use gtk::prelude::*;
 use servo_gtk::{UserContentManager, UserScript, UserStyleSheet, WebView};
 
-use crate::core::{LineEdge, LoadCoordinator, LoadTarget, WordDirection, encode_utf16_units};
+use crate::core::{
+    LineEdge, LoadCoordinator, LoadTarget, WordDirection, default_adblock_dir, encode_utf16_units,
+};
 use crate::engine::clipboard::{
     CLIPBOARD_MESSAGE_HANDLER, copy_selection_script, cut_selection_script,
     parse_clipboard_message, paste_into_tab, write_system_clipboard,
@@ -95,14 +97,15 @@ impl WebTab {
         let view = WebView::with_user_content_manager(&user_content);
         view.set_hexpand(true);
         view.set_vexpand(true);
+        view.set_adblock_dir(&default_adblock_dir().to_string_lossy());
 
-        let tab = Self {
-            view,
-            user_content,
-            state: Rc::new(RefCell::new(LoadCoordinator::new(initial))),
-        };
+        let tab = Self { view, user_content, state: Rc::new(RefCell::new(LoadCoordinator::new(initial))) };
         tab.schedule_ready_fallback();
         tab
+    }
+
+    pub fn reload_adblock(&self, dir: &str) {
+        self.view.set_adblock_dir(dir);
     }
 
     pub fn view(&self) -> &WebView {
