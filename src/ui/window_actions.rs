@@ -230,10 +230,11 @@ impl BrowserWindow {
         }
         match next_cfg.save(&path) {
             Ok(()) => {
+                servo_gtk::set_user_agent(next_cfg.user_agent.clone());
                 *self.config.borrow_mut() = next_cfg.clone();
                 self.key_handler.set_config(next_cfg.clone());
                 let msg = if reset {
-                    format!("Reset shortcuts to defaults ({})", path.display())
+                    format!("Reset config to defaults ({})", path.display())
                 } else {
                     format!("Saved config to {}", path.display())
                 };

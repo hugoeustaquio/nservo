@@ -5,8 +5,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use nservo::core::{
-    BrowserAction, BrowserConfig, CompletionSources, ConfigEvent, KeyInput, KeyMapper, KeyOutcome,
-    Mode, complete_command_input, parse_command, parse_config_message, resolve_config_path,
+    BrowserAction, BrowserConfig, CompletionSources, ConfigEvent, DEFAULT_USER_AGENT, KeyInput,
+    KeyMapper, KeyOutcome, Mode, complete_command_input, parse_command, parse_config_message,
+    resolve_config_path,
 };
 use nservo::engine::config_page::{
     CONFIG_MESSAGE_HANDLER, config_feedback_script, render_config_html,
@@ -140,4 +141,54 @@ fn about_config_renders_options_and_parses_save_and_reset_messages() {
     let merged = BrowserConfig::merge_with_defaults(partial, BTreeMap::new());
     assert_eq!(merged.key_for("close_tab"), "x");
     assert_eq!(merged.key_for("reload"), "r");
+    assert_eq!(merged.user_agent, DEFAULT_USER_AGENT);
+}
+
+#[test]
+fn user_agent_defaults_to_nservo_version_and_supports_override() {
+    let path = temp_config_path("ua");
+    let def = BrowserConfig::default();
+    assert_eq!(
+        def.user_agent,
+        format!("NServo {} powered by Servo", env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(def.user_agent, DEFAULT_USER_AGENT);
+
+    let custom_ua = "Mozilla/5.0 (X11; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0";
+    let cfg = BrowserConfig::default().with_user_agent(Some(custom_ua));
+    cfg.save(&path).expect("save custom user_agent");
+    let loaded = BrowserConfig::load(&path);
+    assert_eq!(loaded.user_agent, custom_ua);
+
+    // Partial config.json containing only user_agent still loads and applies cleanly.
+    fs::write(&path, format!(r#"{{"user_agent":"{custom_ua}"}}"#)).expect("write partial");
+    let partial_loaded = BrowserConfig::load(&path);
+    assert_eq!(partial_loaded.user_agent, custom_ua);
+    assert_eq!(partial_loaded.key_for("reload"), "r");
+
+    let html = render_config_html(&loaded, &path, &[]);
+    assert!(html.contains(r#"id="ua-input""#));
+    assert!(html.contains(DEFAULT_USER_AGENT));
+    assert!(html.contains(custom_ua));
+
+    let save_msg = format!(
+        r#"{{"action":"save","user_agent":"{custom_ua}","keybindings":{{"close_tab":"d"}}}}"#
+    );
+    match parse_config_message(&save_msg) {
+        Some(ConfigEvent::Save(parsed)) => assert_eq!(parsed.user_agent, custom_ua),
+        other => panic!("expected Save event, got {other:?}"),
+    }
+
+    // Blank user_agent falls back to default; control/non-ASCII chars fail validation.
+    let blank_msg = r#"{"action":"save","user_agent":"   ","keybindings":{"close_tab":"d"}}"#;
+    match parse_config_message(blank_msg) {
+        Some(ConfigEvent::Save(parsed)) => assert_eq!(parsed.user_agent, DEFAULT_USER_AGENT),
+        other => panic!("expected Save event, got {other:?}"),
+    }
+    assert!(BrowserConfig::default().with_user_agent(Some("Bad\r\nHeader")).validate().is_err());
+    assert!(BrowserConfig::default().with_user_agent(Some("NServo café")).validate().is_err());
+
+    if let Some(dir) = path.parent() {
+        let _ = fs::remove_dir_all(dir);
+    }
 }

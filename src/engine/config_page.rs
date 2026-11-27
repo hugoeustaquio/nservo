@@ -2,8 +2,8 @@ use std::fmt::Write;
 use std::path::Path;
 
 use crate::core::{
-    BrowserConfig, InstalledPlugin, SHORTCUT_SPECS, default_config_path, default_plugins_dir,
-    discover_plugins,
+    BrowserConfig, DEFAULT_USER_AGENT, InstalledPlugin, SHORTCUT_SPECS, default_config_path,
+    default_plugins_dir, discover_plugins,
 };
 
 /// Built-in URL for the interactive configuration & keyboard-shortcuts editor.
@@ -25,7 +25,19 @@ pub fn render_config_html(
     plugins: &[InstalledPlugin],
 ) -> String {
     let path_html = escape_html(&config_path.display().to_string());
-    let mut rows = String::new();
+    let ua_cur = escape_html(&config.user_agent);
+    let ua_def = escape_html(DEFAULT_USER_AGENT);
+    let ua_mod = if config.user_agent != DEFAULT_USER_AGENT { " modified" } else { "" };
+    let ua_search = escape_html(&format!("user_agent network user agent {} {}", config.user_agent, DEFAULT_USER_AGENT).to_ascii_lowercase());
+    let mut rows = format!(
+        r#"<tr class="cat-row"><td colspan="4">Network</td></tr>
+<tr class="cfg-row{ua_mod}" data-search="{ua_search}">
+  <td class="id-col"><code>user_agent</code></td>
+  <td class="desc-col">HTTP &amp; JS User-Agent (applies to new tabs; leave blank for default)</td>
+  <td class="def-col"><code>{ua_def}</code></td>
+  <td class="val-col"><input id="ua-input" class="text-input" type="text" data-default="{ua_def}" value="{ua_cur}"></td>
+</tr>"#
+    );
     let mut last_cat = "";
 
     for spec in SHORTCUT_SPECS {
@@ -118,31 +130,33 @@ pub fn render_config_html(
   th {{ text-align: left; color: #787c99; font-size: 0.8rem; border-bottom: 1px solid #292e42; padding: 0.4rem 0.5rem; }}
   td {{ padding: 0.45rem 0.5rem; border-bottom: 1px solid #24283b; vertical-align: middle; }}
   tr.cat-row td {{ color: #bb9af7; font-weight: bold; padding-top: 1.15rem; border-bottom: 1px solid #292e42; }}
-  tr.modified .key-input {{ border-color: #e0af68; color: #e0af68; }}
-  .key-input {{
-    width: 64px; text-align: center; background: #16161e; color: #9ece6a;
+  tr.modified .key-input, tr.modified .text-input {{ border-color: #e0af68; color: #e0af68; }}
+  .key-input, .text-input {{
+    background: #16161e; color: #9ece6a;
     border: 1px solid #3b4261; border-radius: 4px; padding: 0.28rem 0.4rem;
     font: inherit; font-weight: bold;
   }}
-  .key-input:focus {{ border-color: #7aa2f7; outline: none; }}
+  .key-input {{ width: 64px; text-align: center; }}
+  .text-input {{ width: 220px; font-weight: normal; }}
+  .key-input:focus, .text-input:focus {{ border-color: #7aa2f7; outline: none; }}
   code {{ background: #24283b; padding: 0.1rem 0.35rem; border-radius: 3px; color: #e0af68; }}
-  .id-col {{ width: 210px; }}
-  .def-col {{ width: 90px; text-align: center; }}
-  .val-col {{ width: 100px; text-align: center; }}
+  .id-col {{ width: 190px; }}
+  .def-col {{ width: 130px; text-align: center; }}
+  .val-col {{ width: 235px; text-align: center; }}
 </style>
 </head>
 <body>
 <main>
   <h1>nservo — about:config</h1>
-  <p class="subtitle">Saved to <code>{path_html}</code>. Press <code>i</code> (or click an input) to edit 1–2 char Normal-mode shortcuts; changes apply immediately on Save.</p>
+  <p class="subtitle">Saved to <code>{path_html}</code>. Press <code>i</code> (or click an input) to edit preferences and 1–2 char Normal-mode shortcuts; shortcuts apply immediately and User-Agent applies to new tabs.</p>
   <div id="banner"></div>
   <div class="toolbar">
-    <input id="filter" class="filter" type="search" placeholder="Filter shortcuts by name, key, or description...">
+    <input id="filter" class="filter" type="search" placeholder="Filter preferences by name, value, or description...">
     <button id="save-btn" class="btn" type="button">Save</button>
     <button id="reset-btn" class="btn secondary" type="button">Reset Defaults</button>
   </div>
   <table>
-    <thead><tr><th>Action</th><th>Description</th><th>Default</th><th>Shortcut</th></tr></thead>
+    <thead><tr><th>Option</th><th>Description</th><th>Default</th><th>Value</th></tr></thead>
     <tbody>{rows}</tbody>
   </table>
 </main>
@@ -170,7 +184,9 @@ pub fn render_config_html(
         map[inputs[i].dataset.id] = val;
       }}
     }}
-    postConfig({{ action: 'save', keybindings: map, plugin_keybindings: pmap }});
+    var uaEl = document.getElementById('ua-input');
+    var ua = uaEl ? uaEl.value.trim() : '';
+    postConfig({{ action: 'save', user_agent: ua, keybindings: map, plugin_keybindings: pmap }});
   }});
   document.getElementById('reset-btn').addEventListener('click', function() {{
     postConfig({{ action: 'reset' }});
@@ -183,7 +199,7 @@ pub fn render_config_html(
       rows[i].style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
     }}
   }});
-  var inputs = document.querySelectorAll('.key-input');
+  var inputs = document.querySelectorAll('.key-input, .text-input');
   for (var j = 0; j < inputs.length; j++) {{
     inputs[j].addEventListener('input', function(ev) {{
       var inp = ev.target;

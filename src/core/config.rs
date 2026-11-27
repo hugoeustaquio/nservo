@@ -48,9 +48,18 @@ pub const SHORTCUT_SPECS: &[ShortcutSpec] = &[
     ShortcutSpec { id: "toggle_inspector", default_key: "wi", category: "Library & Tools", description: "Toggle Web Inspector drawer" },
 ];
 
+/// Default `User-Agent` header sent by `nservo` unless overridden in `config.json`.
+pub const DEFAULT_USER_AGENT: &str = concat!("NServo ", env!("CARGO_PKG_VERSION"), " powered by Servo");
+
+fn default_user_agent() -> String {
+    DEFAULT_USER_AGENT.to_string()
+}
+
 /// Persistent user configuration stored at `$XDG_CONFIG_HOME/nservo/config.json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BrowserConfig {
+    #[serde(default = "default_user_agent")]
+    pub user_agent: String,
     #[serde(default)]
     pub keybindings: BTreeMap<String, String>,
     #[serde(default)]
@@ -64,6 +73,7 @@ impl Default for BrowserConfig {
             keybindings.insert(spec.id.to_string(), spec.default_key.to_string());
         }
         Self {
+            user_agent: default_user_agent(),
             keybindings,
             plugin_keybindings: BTreeMap::new(),
         }
@@ -78,8 +88,16 @@ impl BrowserConfig {
     pub fn load(path: &Path) -> Self {
         let Ok(raw) = fs::read_to_string(path) else { return Self::default(); };
         let Ok(parsed) = serde_json::from_str::<BrowserConfig>(&raw) else { return Self::default(); };
-        let merged = Self::merge_with_defaults(parsed.keybindings, parsed.plugin_keybindings);
+        let merged = Self::merge_with_defaults(parsed.keybindings, parsed.plugin_keybindings)
+            .with_user_agent(Some(&parsed.user_agent));
         if merged.validate().is_ok() { merged } else { Self::default() }
+    }
+
+    /// Apply an optional user-agent override, falling back to [`DEFAULT_USER_AGENT`] if blank.
+    pub fn with_user_agent(mut self, ua: Option<&str>) -> Self {
+        let trimmed = ua.map(str::trim).unwrap_or("");
+        self.user_agent = if trimmed.is_empty() { default_user_agent() } else { trimmed.to_string() };
+        self
     }
 
     /// Merge partial user keybindings onto defaults, preserving valid plugin bindings.
@@ -91,16 +109,12 @@ impl BrowserConfig {
         for spec in SHORTCUT_SPECS {
             if let Some(val) = overrides.get(spec.id) {
                 let trimmed = val.trim();
-                if !trimmed.is_empty() {
-                    cfg.keybindings.insert(spec.id.to_string(), trimmed.to_string());
-                }
+                if !trimmed.is_empty() { cfg.keybindings.insert(spec.id.to_string(), trimmed.to_string()); }
             }
         }
         for (name, val) in plugin_overrides {
             let trimmed = val.trim();
-            if !trimmed.is_empty() {
-                cfg.plugin_keybindings.insert(name, trimmed.to_string());
-            }
+            if !trimmed.is_empty() { cfg.plugin_keybindings.insert(name, trimmed.to_string()); }
         }
         cfg
     }
@@ -135,20 +149,19 @@ impl BrowserConfig {
         self.plugin_keybindings.get(name).map(String::as_str).unwrap_or("")
     }
 
-    /// Validate that all built-in and plugin keybindings are 1- or 2-char non-conflicting sequences.
+    /// Validate user-agent and ensure all built-in/plugin keybindings are non-conflicting.
     pub fn validate(&self) -> Result<(), String> {
+        let ua = self.user_agent.trim();
+        if ua.is_empty() || !ua.bytes().all(|b| b == b'\t' || (0x20..=0x7e).contains(&b)) {
+            return Err("User-Agent must be non-empty printable ASCII".to_string());
+        }
         let mut seen: HashMap<&str, String> = HashMap::new();
         let mut single_chars: HashMap<char, String> = HashMap::new();
         let mut prefixes: HashMap<char, String> = HashMap::new();
-
         let all_entries = SHORTCUT_SPECS
             .iter()
             .map(|s| (s.id.to_string(), self.key_for(s.id)))
-            .chain(
-                self.plugin_keybindings
-                    .iter()
-                    .map(|(k, v)| (format!("plugin:{k}"), v.as_str())),
-            );
+            .chain(self.plugin_keybindings.iter().map(|(k, v)| (format!("plugin:{k}"), v.as_str())));
 
         for (label, seq) in all_entries {
             let chars: Vec<char> = seq.chars().collect();
@@ -164,11 +177,8 @@ impl BrowserConfig {
             if let Some(other) = seen.insert(seq, label.clone()) {
                 return Err(format!("Duplicate shortcut '{seq}' assigned to '{other}' and '{label}'"));
             }
-            if chars.len() == 1 {
-                single_chars.insert(chars[0], label);
-            } else {
-                prefixes.insert(chars[0], label);
-            }
+            if chars.len() == 1 { single_chars.insert(chars[0], label); }
+            else { prefixes.insert(chars[0], label); }
         }
         for (ch, single_id) in &single_chars {
             if let Some(seq_id) = prefixes.get(ch) {
@@ -181,17 +191,12 @@ impl BrowserConfig {
     /// Persist this configuration to `path` as pretty-printed JSON.
     pub fn save(&self, path: &Path) -> Result<(), String> {
         self.validate()?;
-        if let Some(parent) = path.parent()
-            && !parent.as_os_str().is_empty()
-        {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+        if let Some(parent) = path.parent() && !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
         }
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("Failed to serialize config: {e}"))?;
+        let json = serde_json::to_string_pretty(self).map_err(|e| format!("Failed to serialize config: {e}"))?;
         let tmp = path.with_extension(format!("json.tmp.{}", std::process::id()));
-        fs::write(&tmp, format!("{json}\n"))
-            .map_err(|e| format!("Failed to write {}: {e}", tmp.display()))?;
+        fs::write(&tmp, format!("{json}\n")).map_err(|e| format!("Failed to write {}: {e}", tmp.display()))?;
         fs::rename(&tmp, path).map_err(|e| {
             let _ = fs::remove_file(&tmp);
             format!("Failed to save {}: {e}", path.display())
@@ -215,13 +220,8 @@ impl BrowserConfig {
         if let Some((id, _)) = self.keybindings.iter().find(|(_, k)| k.as_str() == seq) {
             return action_for_id(id, count);
         }
-        self.plugin_keybindings
-            .iter()
-            .find(|(_, k)| k.as_str() == seq)
-            .map(|(name, _)| BrowserAction::RunPlugin {
-                name: name.clone(),
-                args: String::new(),
-            })
+        self.plugin_keybindings.iter().find(|(_, k)| k.as_str() == seq)
+            .map(|(name, _)| BrowserAction::RunPlugin { name: name.clone(), args: String::new() })
     }
 }
 
@@ -282,7 +282,10 @@ pub fn parse_config_message(body: &str) -> Option<ConfigEvent> {
                     if let Some(s) = v.as_str() { plug.insert(k.clone(), s.to_string()); }
                 }
             }
-            Some(ConfigEvent::Save(BrowserConfig::merge_with_defaults(overrides, plug)))
+            let ua = val.get("user_agent").and_then(Value::as_str);
+            Some(ConfigEvent::Save(
+                BrowserConfig::merge_with_defaults(overrides, plug).with_user_agent(ua),
+            ))
         }
         _ => None,
     }

@@ -31,7 +31,10 @@ pub use completion::{
     CompletionItem, CompletionKind, CompletionSources, MAX_COMPLETIONS, complete_command_input,
     fuzzy_score,
 };
-pub use config::{BrowserConfig, ConfigEvent, SHORTCUT_SPECS, ShortcutSpec, parse_config_message};
+pub use config::{
+    BrowserConfig, ConfigEvent, DEFAULT_USER_AGENT, SHORTCUT_SPECS, ShortcutSpec,
+    parse_config_message,
+};
 pub use debugger::{
     CallFrame, DebuggerEvent, ScopeBinding, ScriptSource, StepAction, encode_rdp_packet,
     format_scope_bindings, format_source_with_lines, parse_environment_bindings,

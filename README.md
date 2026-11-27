@@ -183,9 +183,12 @@ Key CSS selectors used by `nservo`'s chrome:
 
 Restart `nservo` after editing `style.css` to apply your changes.
 
-### Custom Keyboard Shortcuts (`config.json` & `about:config`)
+### Configuration & Custom Shortcuts (`config.json` & `about:config`)
 
-Normal-mode keyboard shortcuts can be customized either by editing `$XDG_CONFIG_HOME/nservo/config.json` (fallback: `$HOME/.config/nservo/config.json`) directly or interactively inside the browser at **`about:config`** (via `:config` or `:open about:config`). Saving in `about:config` validates bindings (1–2 characters, no duplicates or prefix collisions), persists them to `config.json`, and applies them immediately without restarting `nservo`.
+Preferences and Normal-mode keyboard shortcuts can be customized either by editing `$XDG_CONFIG_HOME/nservo/config.json` (fallback: `$HOME/.config/nservo/config.json`) directly or interactively inside the browser at **`about:config`** (via `:config` or `:open about:config`).
+
+- **`user_agent`**: Defaults to `NServo <version> powered by Servo` (e.g. `NServo 0.1.0 powered by Servo`). Override it to any custom User-Agent string if a site requires a specific browser header (applies to newly opened tabs).
+- **`keybindings` & `plugin_keybindings`**: Validated on save (1–2 characters, no duplicates or prefix collisions), persisted to `config.json`, and applied immediately without restarting `nservo`.
 
 ### Plugins (`$XDG_CONFIG_HOME/nservo/plugins/`)
 

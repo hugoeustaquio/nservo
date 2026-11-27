@@ -40,6 +40,9 @@ fn main() -> ExitCode {
 
     // Store Servo session state (cookies, cache, webstorage, HSTS) under `$TMPDIR/nservo`.
     servo_gtk::set_config_dir(nservo::core::default_session_data_dir());
+    // Apply configured HTTP/JS User-Agent (defaults to `NServo/<version>`).
+    let startup_config = nservo::core::BrowserConfig::load_default();
+    servo_gtk::set_user_agent(startup_config.user_agent);
 
     let _ = log::set_logger(&LOGGER);
     log::set_max_level(log::LevelFilter::Info);
