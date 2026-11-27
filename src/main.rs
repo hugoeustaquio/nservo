@@ -38,6 +38,9 @@ fn main() -> ExitCode {
     // binary as its Servo rendering subprocess.
     servo_gtk::run_as_runner_if_requested();
 
+    // Store Servo session state (cookies, cache, webstorage, HSTS) under `$TMPDIR/nservo`.
+    servo_gtk::set_config_dir(nservo::core::default_session_data_dir());
+
     let _ = log::set_logger(&LOGGER);
     log::set_max_level(log::LevelFilter::Info);
 

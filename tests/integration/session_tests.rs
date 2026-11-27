@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use nservo::core::{
     DEFAULT_SESSION_NAME, Session, SessionError, SessionStore, TabInfo, resolve_config_dir,
-    resolve_db_path, validate_session_name,
+    resolve_db_path, resolve_session_data_dir, validate_session_name,
 };
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -119,5 +119,21 @@ fn resolve_db_path_uses_xdg_config_home_then_home() {
     assert_eq!(
         resolve_db_path(None, Some("/home/alice")),
         PathBuf::from("/home/alice/.config/nservo/nservo.db")
+    );
+}
+
+#[test]
+fn resolve_session_data_dir_uses_tmpdir_then_os_temp() {
+    assert_eq!(
+        resolve_session_data_dir(Some("/var/tmp/custom")),
+        PathBuf::from("/var/tmp/custom/nservo")
+    );
+    assert_eq!(
+        resolve_session_data_dir(Some("")),
+        std::env::temp_dir().join("nservo")
+    );
+    assert_eq!(
+        resolve_session_data_dir(None),
+        std::env::temp_dir().join("nservo")
     );
 }

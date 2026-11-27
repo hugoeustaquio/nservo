@@ -8,6 +8,8 @@ pub mod history_page;
 pub mod inspector_js;
 pub mod inspector_picker_js;
 pub mod new_tab_page;
+pub mod rdp_client;
+mod rdp_dispatch;
 pub mod scroll;
 pub mod search_js;
 pub mod start_page;

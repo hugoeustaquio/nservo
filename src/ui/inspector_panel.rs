@@ -5,6 +5,7 @@ use gtk::glib;
 use gtk::prelude::*;
 
 use crate::core::{ConsoleEntry, DomNodeSummary, ElementDetails};
+use crate::ui::debugger_view::DebuggerView;
 use crate::ui::inspector_views::{attach_repl_history, build_console_page, build_dom_page};
 
 /// Callbacks emitted by the built-in GTK4 Web Inspector panel.
@@ -12,13 +13,14 @@ use crate::ui::inspector_views::{attach_repl_history, build_console_page, build_
 pub struct InspectorCallbacks {
     pub on_eval_js: Rc<dyn Fn(String)>,
     pub on_refresh_dom: Rc<dyn Fn()>,
+    pub on_open_debugger: Rc<dyn Fn()>,
     pub on_select_dom_node: Rc<dyn Fn(usize)>,
     pub on_toggle_picker: Rc<dyn Fn()>,
     pub on_clear_console: Rc<dyn Fn()>,
     pub on_close: Rc<dyn Fn()>,
 }
 
-/// Lightweight built-in GTK4 Inspector drawer (JS Console/REPL + DOM Inspector).
+/// Lightweight built-in GTK4 Inspector drawer (JS Console/REPL, DOM Inspector & JS Debugger).
 #[derive(Clone)]
 pub struct InspectorPanel {
     root: gtk::Box,
@@ -26,6 +28,7 @@ pub struct InspectorPanel {
     find_btn: gtk::Button,
     console_tab_btn: gtk::Button,
     dom_tab_btn: gtk::Button,
+    debugger_tab_btn: gtk::Button,
     console_view: gtk::TextView,
     console_buffer: gtk::TextBuffer,
     repl_entry: gtk::Entry,
@@ -33,6 +36,7 @@ pub struct InspectorPanel {
     dom_list: gtk::ListBox,
     dom_details: gtk::TextBuffer,
     dom_indices: Rc<RefCell<Vec<usize>>>,
+    debugger: DebuggerView,
     picker_active: Rc<Cell<bool>>,
     history: Rc<RefCell<Vec<String>>>,
     history_pos: Rc<Cell<Option<usize>>>,
@@ -53,6 +57,7 @@ impl InspectorPanel {
         let console_tab_btn = make_header_btn("Console");
         console_tab_btn.add_css_class("inspector-tab-active");
         let dom_tab_btn = make_header_btn("DOM");
+        let debugger_tab_btn = make_header_btn("Debugger");
 
         let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         spacer.set_hexpand(true);
@@ -61,40 +66,39 @@ impl InspectorPanel {
         let clear_btn = make_header_btn("Clear");
         let close_btn = make_header_btn("×");
 
-        header.append(&find_btn);
-        header.append(&console_tab_btn);
-        header.append(&dom_tab_btn);
-        header.append(&spacer);
-        header.append(&refresh_btn);
-        header.append(&clear_btn);
-        header.append(&close_btn);
+        for w in [
+            find_btn.upcast_ref::<gtk::Widget>(),
+            console_tab_btn.upcast_ref(),
+            dom_tab_btn.upcast_ref(),
+            debugger_tab_btn.upcast_ref(),
+            spacer.upcast_ref(),
+            refresh_btn.upcast_ref(),
+            clear_btn.upcast_ref(),
+            close_btn.upcast_ref(),
+        ] {
+            header.append(w);
+        }
 
         let (console_page, console_view, console_buffer, repl_entry) = build_console_page();
         let (dom_page, dom_scroll, dom_list, dom_details) = build_dom_page();
+        let debugger = DebuggerView::new();
 
         let stack = gtk::Stack::new();
         stack.set_vexpand(true);
         stack.set_hexpand(true);
         stack.add_named(&console_page, Some("console"));
         stack.add_named(&dom_page, Some("dom"));
+        stack.add_named(debugger.widget(), Some("debugger"));
         stack.set_visible_child_name("console");
 
         root.append(&header);
         root.append(&stack);
 
         let panel = Self {
-            root,
-            stack,
-            find_btn,
-            console_tab_btn,
-            dom_tab_btn,
-            console_view,
-            console_buffer,
-            repl_entry,
-            dom_scroll,
-            dom_list,
-            dom_details,
+            root, stack, find_btn, console_tab_btn, dom_tab_btn, debugger_tab_btn,
+            console_view, console_buffer, repl_entry, dom_scroll, dom_list, dom_details,
             dom_indices: Rc::new(RefCell::new(Vec::new())),
+            debugger,
             picker_active: Rc::new(Cell::new(false)),
             history: Rc::new(RefCell::new(Vec::new())),
             history_pos: Rc::new(Cell::new(None)),
@@ -104,49 +108,43 @@ impl InspectorPanel {
         panel
     }
 
-    pub fn widget(&self) -> &gtk::Box {
-        &self.root
+    pub fn widget(&self) -> &gtk::Box { &self.root }
+    pub fn debugger(&self) -> &DebuggerView { &self.debugger }
+    pub fn is_open(&self) -> bool { self.root.is_visible() }
+    pub fn is_dom_tab_active(&self) -> bool { self.stack.visible_child_name().as_deref() == Some("dom") }
+    pub fn is_debugger_tab_active(&self) -> bool { self.stack.visible_child_name().as_deref() == Some("debugger") }
+
+    pub fn show_tab(&self, name: &str) {
+        self.stack.set_visible_child_name(name);
+        for (btn, target) in [
+            (&self.console_tab_btn, "console"),
+            (&self.dom_tab_btn, "dom"),
+            (&self.debugger_tab_btn, "debugger"),
+        ] {
+            if target == name { btn.add_css_class("inspector-tab-active"); }
+            else { btn.remove_css_class("inspector-tab-active"); }
+        }
     }
 
-    pub fn is_open(&self) -> bool {
-        self.root.is_visible()
-    }
-
-    pub fn is_dom_tab_active(&self) -> bool {
-        self.stack.visible_child_name().as_deref() == Some("dom")
-    }
-
-    pub fn show_dom_tab(&self) {
-        self.stack.set_visible_child_name("dom");
-        self.dom_tab_btn.add_css_class("inspector-tab-active");
-        self.console_tab_btn.remove_css_class("inspector-tab-active");
-    }
-
-    pub fn is_picker_active(&self) -> bool {
-        self.picker_active.get()
-    }
+    pub fn show_dom_tab(&self) { self.show_tab("dom"); }
+    pub fn is_picker_active(&self) -> bool { self.picker_active.get() }
 
     pub fn set_picker_active(&self, active: bool) {
         self.picker_active.set(active);
-        if active {
-            self.find_btn.add_css_class("inspector-tab-active");
-        } else {
-            self.find_btn.remove_css_class("inspector-tab-active");
-        }
+        if active { self.find_btn.add_css_class("inspector-tab-active"); }
+        else { self.find_btn.remove_css_class("inspector-tab-active"); }
     }
 
     pub fn set_open(&self, open: bool) {
         self.root.set_visible(open);
-        if open && !self.is_dom_tab_active() {
+        if open && self.stack.visible_child_name().as_deref() == Some("console") {
             self.repl_entry.grab_focus();
         }
     }
 
     /// Returns `true` when keyboard focus is inside the inspector drawer.
     pub fn has_focus_within(&self) -> bool {
-        if !self.root.is_visible() {
-            return false;
-        }
+        if !self.root.is_visible() { return false; }
         self.root.root().and_then(|r| r.focus()).is_some_and(|w| {
             w == *self.root.upcast_ref::<gtk::Widget>() || w.is_ancestor(&self.root)
         })
@@ -154,25 +152,19 @@ impl InspectorPanel {
 
     pub fn render_console(&self, entries: &[ConsoleEntry]) {
         self.console_buffer.set_text("");
-        for entry in entries {
-            self.append_console_entry(entry);
-        }
+        for entry in entries { self.append_console_entry(entry); }
     }
 
     pub fn append_console_entry(&self, entry: &ConsoleEntry) {
         let mut end = self.console_buffer.end_iter();
         let line = format!("[{}] {}\n", entry.level.prefix(), entry.text);
-        self.console_buffer
-            .insert_with_tags_by_name(&mut end, &line, &[entry.level.tag_name()]);
+        self.console_buffer.insert_with_tags_by_name(&mut end, &line, &[entry.level.tag_name()]);
         let mut end_after = self.console_buffer.end_iter();
-        self.console_view
-            .scroll_to_iter(&mut end_after, 0.0, false, 0.0, 1.0);
+        self.console_view.scroll_to_iter(&mut end_after, 0.0, false, 0.0, 1.0);
     }
 
     pub fn set_dom_nodes(&self, nodes: &[DomNodeSummary]) {
-        while let Some(child) = self.dom_list.first_child() {
-            self.dom_list.remove(&child);
-        }
+        while let Some(child) = self.dom_list.first_child() { self.dom_list.remove(&child); }
         let mut indices = self.dom_indices.borrow_mut();
         indices.clear();
         for node in nodes {
@@ -205,12 +197,9 @@ impl InspectorPanel {
     }
 
     pub fn clear_dom(&self) {
-        while let Some(child) = self.dom_list.first_child() {
-            self.dom_list.remove(&child);
-        }
+        while let Some(child) = self.dom_list.first_child() { self.dom_list.remove(&child); }
         self.dom_indices.borrow_mut().clear();
-        self.dom_details
-            .set_text("Select an element on the left to inspect its attributes and styles.");
+        self.dom_details.set_text("Select an element on the left to inspect its attributes and styles.");
     }
 
     fn wire_controls(
@@ -220,30 +209,22 @@ impl InspectorPanel {
         close_btn: gtk::Button,
         callbacks: InspectorCallbacks,
     ) {
-        let (stack, c_btn, d_btn, repl) = (
-            self.stack.clone(),
-            self.console_tab_btn.clone(),
-            self.dom_tab_btn.clone(),
-            self.repl_entry.clone(),
-        );
+        let this = self.clone();
         self.console_tab_btn.connect_clicked(move |_| {
-            stack.set_visible_child_name("console");
-            c_btn.add_css_class("inspector-tab-active");
-            d_btn.remove_css_class("inspector-tab-active");
-            repl.grab_focus();
+            this.show_tab("console");
+            this.repl_entry.grab_focus();
         });
 
-        let (stack, c_btn, d_btn, on_refresh) = (
-            self.stack.clone(),
-            self.console_tab_btn.clone(),
-            self.dom_tab_btn.clone(),
-            callbacks.on_refresh_dom.clone(),
-        );
+        let (this, on_refresh) = (self.clone(), callbacks.on_refresh_dom.clone());
         self.dom_tab_btn.connect_clicked(move |_| {
-            stack.set_visible_child_name("dom");
-            d_btn.add_css_class("inspector-tab-active");
-            c_btn.remove_css_class("inspector-tab-active");
+            this.show_tab("dom");
             on_refresh();
+        });
+
+        let (this, on_dbg) = (self.clone(), callbacks.on_open_debugger.clone());
+        self.debugger_tab_btn.connect_clicked(move |_| {
+            this.show_tab("debugger");
+            on_dbg();
         });
 
         let on_toggle_picker = callbacks.on_toggle_picker.clone();
@@ -258,27 +239,17 @@ impl InspectorPanel {
         let on_close = callbacks.on_close.clone();
         close_btn.connect_clicked(move |_| on_close());
 
-        let (on_eval, history, pos) = (
-            callbacks.on_eval_js.clone(),
-            self.history.clone(),
-            self.history_pos.clone(),
-        );
+        let (on_eval, history, pos) = (callbacks.on_eval_js, self.history.clone(), self.history_pos.clone());
         self.repl_entry.connect_activate(move |entry| {
             let expr = entry.text().trim().to_string();
             entry.set_text("");
             pos.set(None);
-            if expr.is_empty() {
-                return;
-            }
+            if expr.is_empty() { return; }
             history.borrow_mut().push(expr.clone());
             on_eval(expr);
         });
 
-        attach_repl_history(
-            &self.repl_entry,
-            self.history.clone(),
-            self.history_pos.clone(),
-        );
+        attach_repl_history(&self.repl_entry, self.history.clone(), self.history_pos.clone());
 
         let (indices, on_select) = (self.dom_indices.clone(), callbacks.on_select_dom_node);
         self.dom_list.connect_row_selected(move |_, row| {

@@ -1,6 +1,8 @@
 pub mod adblock_controller;
 pub mod bookmark_controller;
 pub mod command_bar;
+mod debugger_state;
+pub mod debugger_view;
 pub mod hint_controller;
 pub mod history_controller;
 pub mod im_bridge;

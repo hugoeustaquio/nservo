@@ -104,13 +104,9 @@ impl WebTab {
         tab
     }
 
-    pub fn reload_adblock(&self, dir: &str) {
-        self.view.set_adblock_dir(dir);
-    }
-
-    pub fn view(&self) -> &WebView {
-        &self.view
-    }
+    pub fn reload_adblock(&self, dir: &str) { self.view.set_adblock_dir(dir); }
+    pub fn devtools_endpoint(&self) -> Option<(u16, String)> { self.view.devtools_endpoint() }
+    pub fn view(&self) -> &WebView { &self.view }
 
     pub fn downgrade(&self) -> WeakWebTab {
         WeakWebTab {

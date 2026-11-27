@@ -83,31 +83,18 @@ impl BrowserWindow {
         };
 
         let inspector = {
-            let s_eval = controller_slot.clone();
-            let s_ref = controller_slot.clone();
-            let s_sel = controller_slot.clone();
-            let s_pick = controller_slot.clone();
-            let s_clr = controller_slot.clone();
-            let s_cls = controller_slot.clone();
+            let (s_eval, s_ref, s_dbg) = (controller_slot.clone(), controller_slot.clone(), controller_slot.clone());
+            let (s_sel, s_pick, s_clr, s_cls) = (
+                controller_slot.clone(), controller_slot.clone(), controller_slot.clone(), controller_slot.clone(),
+            );
             InspectorPanel::new(InspectorCallbacks {
-                on_eval_js: Rc::new(move |expr| {
-                    if let Some(c) = get_ctrl(&s_eval) { c.eval_inspector_js(&expr); }
-                }),
-                on_refresh_dom: Rc::new(move || {
-                    if let Some(c) = get_ctrl(&s_ref) { c.refresh_inspector_dom(); }
-                }),
-                on_select_dom_node: Rc::new(move |idx| {
-                    if let Some(c) = get_ctrl(&s_sel) { c.inspect_dom_node(idx); }
-                }),
-                on_toggle_picker: Rc::new(move || {
-                    if let Some(c) = get_ctrl(&s_pick) { c.toggle_element_picker(); }
-                }),
-                on_clear_console: Rc::new(move || {
-                    if let Some(c) = get_ctrl(&s_clr) { c.clear_active_console(); }
-                }),
-                on_close: Rc::new(move || {
-                    if let Some(c) = get_ctrl(&s_cls) { c.set_inspector_open(false); }
-                }),
+                on_eval_js: Rc::new(move |expr| { if let Some(c) = get_ctrl(&s_eval) { c.eval_inspector_js(&expr); } }),
+                on_refresh_dom: Rc::new(move || { if let Some(c) = get_ctrl(&s_ref) { c.refresh_inspector_dom(); } }),
+                on_open_debugger: Rc::new(move || { if let Some(c) = get_ctrl(&s_dbg) { c.connect_debugger_for_active_tab(); } }),
+                on_select_dom_node: Rc::new(move |idx| { if let Some(c) = get_ctrl(&s_sel) { c.inspect_dom_node(idx); } }),
+                on_toggle_picker: Rc::new(move || { if let Some(c) = get_ctrl(&s_pick) { c.toggle_element_picker(); } }),
+                on_clear_console: Rc::new(move || { if let Some(c) = get_ctrl(&s_clr) { c.clear_active_console(); } }),
+                on_close: Rc::new(move || { if let Some(c) = get_ctrl(&s_cls) { c.set_inspector_open(false); } }),
             })
         };
 
@@ -193,7 +180,9 @@ impl BrowserWindow {
 
         let slot_cleanup = controller_slot;
         window.connect_close_request(move |_| {
-            slot_cleanup.borrow_mut().take();
+            if let Some(ctrl) = slot_cleanup.borrow_mut().take() {
+                ctrl.tab_view.shutdown_all();
+            }
             gtk::glib::Propagation::Proceed
         });
 

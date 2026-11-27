@@ -175,26 +175,11 @@ impl TabView {
         true
     }
 
-    pub fn active_tab(&self) -> Option<WebTab> {
-        let id = self.active_tab_id()?;
-        self.tab_by_id(id)
-    }
-
-    pub fn active_tab_id(&self) -> Option<u64> {
-        self.model.borrow().active_tab().map(|tab| tab.id)
-    }
-
-    pub fn active_tab_info(&self) -> Option<TabInfo> {
-        self.model.borrow().active_tab().cloned()
-    }
-
-    pub fn active_url(&self) -> Option<String> {
-        self.model.borrow().active_tab().map(|tab| tab.url.clone())
-    }
-
-    pub fn active_web_view(&self) -> Option<WebView> {
-        self.active_tab().map(|tab| tab.view().clone())
-    }
+    pub fn active_tab(&self) -> Option<WebTab> { self.tab_by_id(self.active_tab_id()?) }
+    pub fn active_tab_id(&self) -> Option<u64> { self.model.borrow().active_tab().map(|tab| tab.id) }
+    pub fn active_tab_info(&self) -> Option<TabInfo> { self.model.borrow().active_tab().cloned() }
+    pub fn active_url(&self) -> Option<String> { self.model.borrow().active_tab().map(|tab| tab.url.clone()) }
+    pub fn active_web_view(&self) -> Option<WebView> { self.active_tab().map(|tab| tab.view().clone()) }
 
     pub fn reload_active_tab(&self) {
         let Some(id) = self.active_tab_id() else {
@@ -212,9 +197,14 @@ impl TabView {
     }
 
     pub fn reload_adblock(&self, dir: &str) {
-        for entry in self.tabs.borrow().values() {
-            entry.tab.reload_adblock(dir);
-        }
+        for entry in self.tabs.borrow().values() { entry.tab.reload_adblock(dir); }
+    }
+
+    /// Gracefully shut down all materialized Servo runner subprocesses so
+    /// cookies and session storage are flushed to `$TMPDIR/nservo`.
+    pub fn shutdown_all(&self) {
+        let views: Vec<WebView> = self.tabs.borrow().values().map(|e| e.tab.view().clone()).collect();
+        WebView::shutdown_views_and_wait(&views, std::time::Duration::from_millis(1500));
     }
 
     pub fn snapshot(&self) -> (Vec<TabInfo>, usize, f64) {

@@ -137,8 +137,50 @@ Press `:` to open the command bar and run Ex-style commands:
 | `:bmdel [index\|URL]` | `:bookmark-del` | Remove a bookmark by 1-based index, URL, or the current page |
 | `:history [query]` | `:hist` | Show recent browsing history or filter by substring (shortcut: `gh`) |
 | `:history-clear` | `:histclear` | Clear all saved browsing history |
+| `:adblock <URL>` | — | Download an ABP-like filter list into `$XDG_CONFIG_HOME/nservo/adblock/` |
+| `:adblock-update` | — | Re-download all saved adblock filter lists and reload rules |
 | `:help` | `:h` | Open the built-in keyboard & command reference page |
 | `:q` | `:quit`, `:qa` | Quit `nservo` |
+
+---
+
+## Customization & Theming
+
+### Custom CSS Theme (`style.css`)
+
+`nservo`'s default Tokyo Night-inspired GTK4 stylesheet lives in [`assets/style.css`](assets/style.css). On startup, `nservo` checks for a user stylesheet at:
+
+```text
+$XDG_CONFIG_HOME/nservo/style.css   (fallback: $HOME/.config/nservo/style.css)
+```
+
+If that file exists, `nservo` loads it instead of the built-in stylesheet so you can customize colors, fonts, padding, borders, and widget layout using standard GTK4 CSS.
+
+To start customizing from the default theme:
+
+```bash
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/nservo"
+cp assets/style.css "${XDG_CONFIG_HOME:-$HOME/.config}/nservo/style.css"
+```
+
+Key CSS selectors used by `nservo`'s chrome:
+
+| Selector | UI Element |
+| :--- | :--- |
+| `window.nservo-window` | Top-level window background, foreground, and default font |
+| `.tab-bar`, `.tab-button`, `button.tab-button.tab-active` | Tab bar container, inactive tabs, and active tab styling |
+| `.status-bar`, `.status-url`, `.status-pending`, `.status-meta` | Bottom statusline, current URL/notice text (`.error` for errors), pending key chords, and tab/zoom/backend pill |
+| `.mode-badge` (`.mode-normal`, `.mode-insert`, `.mode-command`, `.mode-search`, `.mode-hint`) | Mode indicator pill in the statusline |
+| `.command-bar`, `.command-prefix`, `.command-entry` | Bottom `:` / `/` prompt bar and text entry |
+| `.completion-scroll`, `.completion-list`, `.completion-badge`, `.completion-primary`, `.completion-secondary` | Command-bar fuzzy completion popup and category badges (`.kind-bm`, `.kind-hist`, `.kind-sess`) |
+| `.inspector-panel`, `.inspector-header`, `.inspector-btn`, `.inspector-text`, `.inspector-repl`, `.inspector-dom-list` | Built-in Web Inspector drawer, console output, REPL, and DOM tree |
+| `scrollbar.page-scrollbar` (`.visible`, `.hovering`, `.vertical`, `.horizontal`) | Auto-hiding GTK4 overlay scrollbars |
+
+Restart `nservo` after editing `style.css` to apply your changes.
+
+### Custom Start Page (`startpage.html`)
+
+When opening a new tab with `:tabnew`, `nservo` checks for `$XDG_CONFIG_HOME/nservo/startpage.html` (falling back to `$HOME/.config/nservo/startpage.html`) and renders it instead of the built-in starter page if present.
 
 ### SQLite Persistence (Sessions, Bookmarks & History)
 

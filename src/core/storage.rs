@@ -13,6 +13,9 @@ pub const DB_FILENAME: &str = "nservo.db";
 /// Optional custom start-page HTML filename stored inside `$XDG_CONFIG_HOME/nservo/`.
 pub const STARTPAGE_FILENAME: &str = "startpage.html";
 
+/// Optional custom GTK CSS stylesheet filename stored inside `$XDG_CONFIG_HOME/nservo/`.
+pub const STYLE_FILENAME: &str = "style.css";
+
 /// Subdirectory inside `$XDG_CONFIG_HOME/nservo/` holding ABP-like adblock filter lists.
 pub const ADBLOCK_DIRNAME: &str = "adblock";
 
@@ -90,6 +93,19 @@ pub fn default_startpage_path() -> PathBuf {
     resolve_startpage_path(xdg.as_deref(), home.as_deref())
 }
 
+/// Resolve the optional custom stylesheet path under `$XDG_CONFIG_HOME/nservo/style.css`
+/// (falling back to `$HOME/.config/nservo/style.css`).
+pub fn resolve_style_path(xdg_config_home: Option<&str>, home: Option<&str>) -> PathBuf {
+    resolve_config_dir(xdg_config_home, home).join(STYLE_FILENAME)
+}
+
+/// Default custom stylesheet path resolved from process environment variables.
+pub fn default_style_path() -> PathBuf {
+    let xdg = env::var("XDG_CONFIG_HOME").ok();
+    let home = env::var("HOME").ok();
+    resolve_style_path(xdg.as_deref(), home.as_deref())
+}
+
 /// Resolve the adblock filter-list directory under `$XDG_CONFIG_HOME/nservo/adblock`
 /// (falling back to `$HOME/.config/nservo/adblock`).
 pub fn resolve_adblock_dir(xdg_config_home: Option<&str>, home: Option<&str>) -> PathBuf {
@@ -101,6 +117,22 @@ pub fn default_adblock_dir() -> PathBuf {
     let xdg = env::var("XDG_CONFIG_HOME").ok();
     let home = env::var("HOME").ok();
     resolve_adblock_dir(xdg.as_deref(), home.as_deref())
+}
+
+/// Resolve Servo's session data directory (cookies, cache, webstorage) under
+/// `$TMPDIR/nservo` (falling back to the OS temp dir + `/nservo`).
+pub fn resolve_session_data_dir(tmpdir: Option<&str>) -> PathBuf {
+    let base = tmpdir
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(env::temp_dir);
+    base.join("nservo")
+}
+
+/// Default session data directory resolved from `$TMPDIR` (or OS temp dir).
+pub fn default_session_data_dir() -> PathBuf {
+    let tmpdir = env::var("TMPDIR").ok();
+    resolve_session_data_dir(tmpdir.as_deref())
 }
 
 /// Open (creating parent directories if needed) and initialize the SQLite database.

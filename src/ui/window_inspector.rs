@@ -11,13 +11,26 @@ impl BrowserWindow {
                 self.inspector.render_console(&entries);
             }
             self.refresh_inspector_dom();
+            if self.inspector.is_debugger_tab_active() {
+                self.connect_debugger_for_active_tab();
+            }
         } else {
             self.stop_element_picker();
+            self.inspector.debugger().disconnect();
             if let Some(tab) = self.tab_view.active_tab() {
                 tab.clear_inspector_highlight();
             }
             self.tab_view.focus_active();
         }
+    }
+
+    pub(super) fn connect_debugger_for_active_tab(&self) {
+        let Some(tab_id) = self.tab_view.active_tab_id() else {
+            self.inspector.debugger().disconnect();
+            return;
+        };
+        let endpoint = self.tab_view.active_tab().and_then(|t| t.devtools_endpoint());
+        self.inspector.debugger().connect_to_tab(tab_id, endpoint);
     }
 
     pub(super) fn toggle_element_picker(&self) {
@@ -56,6 +69,8 @@ impl BrowserWindow {
             self.inspector.render_console(&entries);
             if self.inspector.is_dom_tab_active() {
                 self.refresh_inspector_dom();
+            } else if self.inspector.is_debugger_tab_active() {
+                self.connect_debugger_for_active_tab();
             }
         }
     }
