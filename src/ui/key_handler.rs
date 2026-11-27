@@ -6,7 +6,7 @@ use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 
-use crate::core::{BrowserAction, KEY_SEQUENCE_TIMEOUT, KeyMapper, KeyOutcome, Mode};
+use crate::core::{BrowserAction, BrowserConfig, KEY_SEQUENCE_TIMEOUT, KeyMapper, KeyOutcome, Mode};
 use crate::ui::im_bridge::{ImBridge, ImOutcome};
 use crate::ui::key_chords::{
     has_non_text_modifier, is_modifier_only, match_ctrl_editing_chord, match_word_motion,
@@ -31,13 +31,19 @@ pub struct KeyHandler {
 }
 
 impl KeyHandler {
-    pub fn new(mode: Rc<Cell<Mode>>) -> Self {
+    pub fn new(mode: Rc<Cell<Mode>>, config: BrowserConfig) -> Self {
         Self {
-            mapper: Rc::new(RefCell::new(KeyMapper::new())),
+            mapper: Rc::new(RefCell::new(KeyMapper::with_config(config))),
             timer_gen: Rc::new(Cell::new(0)),
             im: ImBridge::new(),
             mode,
         }
+    }
+
+    /// Live-reload keybindings after the user saves or resets `about:config`.
+    pub fn set_config(&self, config: BrowserConfig) {
+        self.cancel_timer();
+        self.mapper.borrow_mut().set_config(config);
     }
 
     /// Cancel any buffered multi-key sequence and its 400ms expiration timer.

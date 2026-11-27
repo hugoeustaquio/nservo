@@ -7,6 +7,7 @@ mod adblock_tests;
 mod bookmarks_tests;
 mod command_tests;
 mod completion_tests;
+mod config_tests;
 mod debugger_tests;
 mod gpu_tests;
 mod hints_tests;

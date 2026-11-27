@@ -1,6 +1,7 @@
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
-use crate::core::{BrowserAction, Mode};
+use crate::core::{BrowserAction, BrowserConfig, Mode};
 
 /// Timeout window for multi-key Neovim sequences such as `gt`, `gT`, and `gg`.
 pub const KEY_SEQUENCE_TIMEOUT: Duration = Duration::from_millis(400);
@@ -47,14 +48,38 @@ struct PendingState {
 }
 
 /// Pure, deterministic Neovim keybinding state machine with timeout support.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct KeyMapper {
+    config: BrowserConfig,
+    prefixes: HashSet<char>,
     pending: Option<PendingState>,
+}
+
+impl Default for KeyMapper {
+    fn default() -> Self {
+        Self::with_config(BrowserConfig::default())
+    }
 }
 
 impl KeyMapper {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_config(config: BrowserConfig) -> Self {
+        let prefixes = config.sequence_prefixes();
+        Self {
+            config,
+            prefixes,
+            pending: None,
+        }
+    }
+
+    /// Replace active keybindings at runtime (e.g. after saving `about:config`).
+    pub fn set_config(&mut self, config: BrowserConfig) {
+        self.prefixes = config.sequence_prefixes();
+        self.config = config;
+        self.pending = None;
     }
 
     /// Currently buffered prefix key or numeric count (e.g. `"g"` or `"12"`), if not expired.
@@ -153,51 +178,36 @@ impl KeyMapper {
 
         match input {
             KeyInput::Escape => KeyOutcome::Action(BrowserAction::ClearSearch),
-            KeyInput::Char(prefix @ ('g' | 'w')) => {
+            KeyInput::Reload => KeyOutcome::Action(BrowserAction::Reload),
+            KeyInput::Char(ch) if self.prefixes.contains(&ch) => {
                 self.pending = Some(PendingState {
-                    kind: PendingKind::Prefix(prefix),
+                    kind: PendingKind::Prefix(ch),
                     started_at: now,
                 });
-                KeyOutcome::Pending(prefix.to_string())
+                KeyOutcome::Pending(ch.to_string())
             }
-            KeyInput::Char('j') => KeyOutcome::Action(BrowserAction::ScrollDown(count)),
-            KeyInput::Char('k') => KeyOutcome::Action(BrowserAction::ScrollUp(count)),
-            KeyInput::Char('h') => KeyOutcome::Action(BrowserAction::ScrollLeft(count)),
-            KeyInput::Char('l') => KeyOutcome::Action(BrowserAction::ScrollRight(count)),
-            KeyInput::Char('G') => KeyOutcome::Action(BrowserAction::ScrollBottom),
-            KeyInput::Char('H') => KeyOutcome::Action(BrowserAction::GoBack),
-            KeyInput::Char('L') => KeyOutcome::Action(BrowserAction::GoForward),
-            KeyInput::Char('d') => KeyOutcome::Action(BrowserAction::CloseTab),
-            KeyInput::Char('u') => KeyOutcome::Action(BrowserAction::ReopenClosedTab),
-            KeyInput::Char('o') => {
-                KeyOutcome::Action(BrowserAction::EnterCommandWith("open ".to_string()))
+            KeyInput::Char(ch) => {
+                let mut buf = [0u8; 4];
+                let seq = ch.encode_utf8(&mut buf);
+                match self.config.resolve_action(seq, count) {
+                    Some(action) => KeyOutcome::Action(action),
+                    None => KeyOutcome::Consumed,
+                }
             }
-            KeyInput::Char('O') => {
-                KeyOutcome::Action(BrowserAction::EnterCommandWith("Open ".to_string()))
-            }
-            KeyInput::Char('r') | KeyInput::Reload => KeyOutcome::Action(BrowserAction::Reload),
-            KeyInput::Char('f') => KeyOutcome::Action(BrowserAction::StartHints { new_tab: false }),
-            KeyInput::Char('F') => KeyOutcome::Action(BrowserAction::StartHints { new_tab: true }),
-            KeyInput::Char('b') => KeyOutcome::Action(BrowserAction::AddBookmark),
-            KeyInput::Char('B') => KeyOutcome::Action(BrowserAction::ShowBookmarks),
-            KeyInput::Char('/') => KeyOutcome::Action(BrowserAction::EnterMode(Mode::Search)),
-            KeyInput::Char('n') => KeyOutcome::Action(BrowserAction::SearchNext),
-            KeyInput::Char('N') => KeyOutcome::Action(BrowserAction::SearchPrev),
-            KeyInput::Char('i') => KeyOutcome::Action(BrowserAction::EnterMode(Mode::Insert)),
-            KeyInput::Char(':') => KeyOutcome::Action(BrowserAction::EnterMode(Mode::Command)),
-            KeyInput::Char(_) | KeyInput::Backspace | KeyInput::Other => KeyOutcome::Consumed,
+            KeyInput::Backspace | KeyInput::Other => KeyOutcome::Consumed,
         }
     }
 
     fn resolve_sequence(&self, prefix: char, second: KeyInput) -> KeyOutcome {
-        match (prefix, second) {
-            ('g', KeyInput::Char('t')) => KeyOutcome::Action(BrowserAction::NextTab),
-            ('g', KeyInput::Char('T')) => KeyOutcome::Action(BrowserAction::PrevTab),
-            ('g', KeyInput::Char('g')) => KeyOutcome::Action(BrowserAction::ScrollTop),
-            ('g', KeyInput::Char('o')) => KeyOutcome::Action(BrowserAction::EditCurrentUrl),
-            ('g', KeyInput::Char('h')) => KeyOutcome::Action(BrowserAction::ShowHistory(None)),
-            ('w', KeyInput::Char('i')) => KeyOutcome::Action(BrowserAction::ToggleInspector),
-            _ => KeyOutcome::Consumed,
+        let KeyInput::Char(ch) = second else {
+            return KeyOutcome::Consumed;
+        };
+        let mut seq = String::with_capacity(8);
+        seq.push(prefix);
+        seq.push(ch);
+        match self.config.resolve_action(&seq, 1) {
+            Some(action) => KeyOutcome::Action(action),
+            None => KeyOutcome::Consumed,
         }
     }
 

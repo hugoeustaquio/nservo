@@ -139,6 +139,7 @@ Press `:` to open the command bar and run Ex-style commands:
 | `:history-clear` | `:histclear` | Clear all saved browsing history |
 | `:adblock <URL>` | — | Download an ABP-like filter list into `$XDG_CONFIG_HOME/nservo/adblock/` |
 | `:adblock-update` | — | Re-download all saved adblock filter lists and reload rules |
+| `:config` | — | Open interactive settings & keyboard shortcuts page (`about:config`) |
 | `:help` | `:h` | Open the built-in keyboard & command reference page |
 | `:q` | `:quit`, `:qa` | Quit `nservo` |
 
@@ -177,6 +178,10 @@ Key CSS selectors used by `nservo`'s chrome:
 | `scrollbar.page-scrollbar` (`.visible`, `.hovering`, `.vertical`, `.horizontal`) | Auto-hiding GTK4 overlay scrollbars |
 
 Restart `nservo` after editing `style.css` to apply your changes.
+
+### Custom Keyboard Shortcuts (`config.json` & `about:config`)
+
+Normal-mode keyboard shortcuts can be customized either by editing `$XDG_CONFIG_HOME/nservo/config.json` (fallback: `$HOME/.config/nservo/config.json`) directly or interactively inside the browser at **`about:config`** (via `:config` or `:open about:config`). Saving in `about:config` validates bindings (1–2 characters, no duplicates or prefix collisions), persists them to `config.json`, and applies them immediately without restarting `nservo`.
 
 ### Custom Start Page (`startpage.html`)
 

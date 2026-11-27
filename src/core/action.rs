@@ -60,6 +60,7 @@ pub enum BrowserAction {
     ZoomIn,
     ZoomOut,
     ShowHelp,
+    ShowConfig,
     ToggleInspector,
 
     /// Session, bookmark & history persistence actions.

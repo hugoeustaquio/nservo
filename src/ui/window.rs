@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use gtk::prelude::*;
 
-use crate::core::{ConsoleStore, Mode, parse_command};
+use crate::core::{BrowserConfig, ConsoleStore, Mode, parse_command};
 use crate::engine::gpu::{self, RenderBackend};
 use crate::ui::adblock_controller::AdblockController;
 use crate::ui::bookmark_controller::BookmarkController;
@@ -35,6 +35,7 @@ pub struct BrowserWindow {
     pub(super) status_bar: StatusBar,
     pub(super) command_bar: CommandBar,
     pub(super) key_handler: KeyHandler,
+    pub(super) config: RefCell<BrowserConfig>,
     pub(super) sessions: SessionController,
     pub(super) bookmarks: BookmarkController,
     pub(super) history: HistoryController,
@@ -58,7 +59,8 @@ impl BrowserWindow {
         window.add_css_class("nservo-window");
 
         let mode = Rc::new(Cell::new(Mode::Normal));
-        let key_handler = KeyHandler::new(mode.clone());
+        let config = BrowserConfig::load_default();
+        let key_handler = KeyHandler::new(mode.clone(), config.clone());
         let status_bar = StatusBar::new();
 
         // Late-bound controller slot so widget callbacks can reach `Rc<Self>` cleanly.
@@ -104,6 +106,7 @@ impl BrowserWindow {
             let s_hint = controller_slot.clone();
             let s_ins = controller_slot.clone();
             let s_srch = controller_slot.clone();
+            let s_cfg = controller_slot.clone();
             let s_hist = controller_slot.clone();
             let s_nav = controller_slot.clone();
             TabView::new(TabViewCallbacks {
@@ -121,6 +124,9 @@ impl BrowserWindow {
                 }),
                 on_search_event: Rc::new(move |id, ev| {
                     if let Some(c) = get_ctrl(&s_srch) { c.handle_search_event(id, ev); }
+                }),
+                on_config_event: Rc::new(move |id, ev| {
+                    if let Some(c) = get_ctrl(&s_cfg) { c.handle_config_event(id, ev); }
                 }),
                 on_history_sync: Rc::new(move |sync| {
                     if let Some(c) = get_ctrl(&s_hist) { c.history.handle_sync(sync); }
@@ -157,6 +163,7 @@ impl BrowserWindow {
             status_bar,
             command_bar,
             key_handler,
+            config: RefCell::new(config),
             sessions: SessionController::new(),
             bookmarks: BookmarkController::new(),
             history: HistoryController::new(),

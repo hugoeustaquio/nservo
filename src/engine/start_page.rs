@@ -82,6 +82,7 @@ pub const HELP_PAGE_HTML: &str = r#"<!DOCTYPE html>
     <tr><td>:history-clear</td><td>Clear all saved browsing history</td></tr>
     <tr><td>:adblock &lt;URL&gt;</td><td>Download an ABP-like filter list into <code>$XDG_CONFIG_HOME/nservo/adblock/</code></td></tr>
     <tr><td>:adblock-update</td><td>Update all saved adblock filter lists and reload rules</td></tr>
+    <tr><td>:config</td><td>Open interactive settings &amp; shortcuts page (<code>about:config</code>)</td></tr>
     <tr><td>:help</td><td>Show this reference page</td></tr>
     <tr><td>:q / :quit</td><td>Quit nservo</td></tr>
   </table>

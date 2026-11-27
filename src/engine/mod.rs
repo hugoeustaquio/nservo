@@ -1,6 +1,7 @@
 pub mod adblock_fetch;
 pub mod bookmarks_page;
 pub mod clipboard;
+pub mod config_page;
 pub mod epoxy;
 pub mod gpu;
 pub mod hints_js;

@@ -13,6 +13,7 @@ use crate::engine::clipboard::{
     CLIPBOARD_MESSAGE_HANDLER, copy_selection_script, cut_selection_script,
     parse_clipboard_message, paste_into_tab, write_system_clipboard,
 };
+use crate::engine::config_page::{CONFIG_MESSAGE_HANDLER, config_feedback_script};
 use crate::engine::hints_js::{
     HINT_MESSAGE_HANDLER, activate_hints_script, clear_hints_script, filter_hints_script,
 };
@@ -80,6 +81,7 @@ impl WebTab {
         let user_content = UserContentManager::new();
         user_content.register_script_message_handler(HINT_MESSAGE_HANDLER);
         user_content.register_script_message_handler(CLIPBOARD_MESSAGE_HANDLER);
+        user_content.register_script_message_handler(CONFIG_MESSAGE_HANDLER);
         user_content.register_script_message_handler(INSPECTOR_MESSAGE_HANDLER);
         user_content.register_script_message_handler(SCROLL_MESSAGE_HANDLER);
         user_content.register_script_message_handler(SEARCH_MESSAGE_HANDLER);
@@ -106,6 +108,9 @@ impl WebTab {
 
     pub fn reload_adblock(&self, dir: &str) { self.view.set_adblock_dir(dir); }
     pub fn devtools_endpoint(&self) -> Option<(u16, String)> { self.view.devtools_endpoint() }
+    pub fn notify_config_result(&self, ok: bool, msg: &str) {
+        self.view.evaluate_javascript(&config_feedback_script(ok, msg));
+    }
     pub fn view(&self) -> &WebView { &self.view }
 
     pub fn downgrade(&self) -> WeakWebTab {

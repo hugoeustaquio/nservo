@@ -63,6 +63,7 @@ pub fn parse_command(raw: &str) -> Result<BrowserAction, CommandError> {
         "inspect" | "inspector" | "devtools" => Ok(BrowserAction::ToggleInspector),
         "noh" | "nohlsearch" => Ok(BrowserAction::ClearSearch),
         "help" | "h" => Ok(BrowserAction::ShowHelp),
+        "config" => Ok(BrowserAction::ShowConfig),
         "w" | "write" => parse_optional_session(rest).map(BrowserAction::SaveSession),
         "wq" => parse_optional_session(rest).map(BrowserAction::SaveSessionAndQuit),
         "session" => parse_required_session(rest).map(BrowserAction::LoadSession),

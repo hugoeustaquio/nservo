@@ -4,6 +4,7 @@ mod adblock_match;
 pub mod bookmarks;
 pub mod command;
 pub mod completion;
+pub mod config;
 pub mod debugger;
 pub mod hints;
 pub mod history;
@@ -29,6 +30,7 @@ pub use completion::{
     CompletionItem, CompletionKind, CompletionSources, MAX_COMPLETIONS, complete_command_input,
     fuzzy_score,
 };
+pub use config::{BrowserConfig, ConfigEvent, SHORTCUT_SPECS, ShortcutSpec, parse_config_message};
 pub use debugger::{
     CallFrame, DebuggerEvent, ScopeBinding, ScriptSource, StepAction, encode_rdp_packet,
     format_scope_bindings, format_source_with_lines, parse_environment_bindings,
@@ -53,10 +55,11 @@ pub use session::{
     DEFAULT_SESSION_NAME, SavedTab, Session, SessionError, SessionStore, validate_session_name,
 };
 pub use storage::{
-    ADBLOCK_DIRNAME, DB_FILENAME, STARTPAGE_FILENAME, STYLE_FILENAME, StorageError,
-    default_adblock_dir, default_db_path, default_session_data_dir, default_startpage_path,
-    default_style_path, resolve_adblock_dir, resolve_config_dir, resolve_db_path,
-    resolve_session_data_dir, resolve_startpage_path, resolve_style_path,
+    ADBLOCK_DIRNAME, CONFIG_FILENAME, DB_FILENAME, STARTPAGE_FILENAME, STYLE_FILENAME,
+    StorageError, default_adblock_dir, default_config_path, default_db_path,
+    default_session_data_dir, default_startpage_path, default_style_path, resolve_adblock_dir,
+    resolve_config_dir, resolve_config_path, resolve_db_path, resolve_session_data_dir,
+    resolve_startpage_path, resolve_style_path,
 };
 pub use tab_model::{ClosedTab, TabInfo, TabModel};
 pub use text_input::{

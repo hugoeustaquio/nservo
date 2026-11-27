@@ -75,6 +75,7 @@ const COMMAND_SPECS: &[CommandSpec] = &[
     CommandSpec { name: "history-clear", takes_arg: false, description: "Clear all saved history" },
     CommandSpec { name: "adblock", takes_arg: true, description: "Download ABP filter list from URL" },
     CommandSpec { name: "adblock-update", takes_arg: false, description: "Update saved adblock filter lists" },
+    CommandSpec { name: "config", takes_arg: false, description: "Open settings & shortcuts (about:config)" },
     CommandSpec { name: "help", takes_arg: false, description: "Open keyboard & command reference" },
     CommandSpec { name: "quit", takes_arg: false, description: "Quit nservo" },
 ];

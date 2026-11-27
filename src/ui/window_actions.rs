@@ -1,10 +1,10 @@
 use gtk::prelude::*;
 
 use crate::core::{
-    BookmarkStore, BrowserAction, CompletionSources, HintEvent, HistoryStore, Mode, SearchEvent,
-    SessionStore, ZOOM_STEP, step_zoom,
+    BookmarkStore, BrowserAction, BrowserConfig, CompletionSources, ConfigEvent, HintEvent,
+    HistoryStore, Mode, SearchEvent, SessionStore, ZOOM_STEP, default_config_path, step_zoom,
 };
-use crate::engine::{new_tab_page, scroll, start_page};
+use crate::engine::{config_page, new_tab_page, scroll, start_page};
 use crate::ui::window::BrowserWindow;
 
 impl BrowserWindow {
@@ -118,6 +118,14 @@ impl BrowserWindow {
                     start_page::HELP_PAGE_HTML,
                 );
             }
+            BrowserAction::ShowConfig => {
+                let html = config_page::render_default_config_html(&self.config.borrow());
+                self.tab_view.load_html_in_active_tab(
+                    config_page::CONFIG_PAGE_URL,
+                    "nservo — Config",
+                    &html,
+                );
+            }
             BrowserAction::ToggleInspector => {
                 self.set_inspector_open(!self.inspector.is_open());
             }
@@ -203,6 +211,46 @@ impl BrowserWindow {
     pub(super) fn handle_search_event(&self, tab_id: u64, event: SearchEvent) {
         if self.tab_view.active_tab_id() == Some(tab_id) {
             self.search.handle_event(&self.status_bar, event);
+        }
+    }
+
+    pub(super) fn handle_config_event(&self, tab_id: u64, event: ConfigEvent) {
+        let path = default_config_path();
+        let (next_cfg, reset) = match event {
+            ConfigEvent::Save(cfg) => (cfg, false),
+            ConfigEvent::Reset => (BrowserConfig::default(), true),
+        };
+        match next_cfg.save(&path) {
+            Ok(()) => {
+                *self.config.borrow_mut() = next_cfg.clone();
+                self.key_handler.set_config(next_cfg.clone());
+                let msg = if reset {
+                    format!("Reset shortcuts to defaults ({})", path.display())
+                } else {
+                    format!("Saved config to {}", path.display())
+                };
+                self.status_bar.show_notice(&msg);
+                if reset && self.tab_view.active_tab_id() == Some(tab_id) {
+                    let html = config_page::render_config_html(&next_cfg, &path);
+                    self.tab_view.load_html_in_active_tab(
+                        config_page::CONFIG_PAGE_URL,
+                        "nservo — Config",
+                        &html,
+                    );
+                } else if let Some(tab) = self.tab_view.active_tab()
+                    && self.tab_view.active_tab_id() == Some(tab_id)
+                {
+                    tab.notify_config_result(true, &msg);
+                }
+            }
+            Err(err) => {
+                self.status_bar.show_error(&err);
+                if let Some(tab) = self.tab_view.active_tab()
+                    && self.tab_view.active_tab_id() == Some(tab_id)
+                {
+                    tab.notify_config_result(false, &err);
+                }
+            }
         }
     }
 

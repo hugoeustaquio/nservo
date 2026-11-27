@@ -16,6 +16,9 @@ pub const STARTPAGE_FILENAME: &str = "startpage.html";
 /// Optional custom GTK CSS stylesheet filename stored inside `$XDG_CONFIG_HOME/nservo/`.
 pub const STYLE_FILENAME: &str = "style.css";
 
+/// User configuration JSON filename stored inside `$XDG_CONFIG_HOME/nservo/`.
+pub const CONFIG_FILENAME: &str = "config.json";
+
 /// Subdirectory inside `$XDG_CONFIG_HOME/nservo/` holding ABP-like adblock filter lists.
 pub const ADBLOCK_DIRNAME: &str = "adblock";
 
@@ -104,6 +107,19 @@ pub fn default_style_path() -> PathBuf {
     let xdg = env::var("XDG_CONFIG_HOME").ok();
     let home = env::var("HOME").ok();
     resolve_style_path(xdg.as_deref(), home.as_deref())
+}
+
+/// Resolve the user config file path under `$XDG_CONFIG_HOME/nservo/config.json`
+/// (falling back to `$HOME/.config/nservo/config.json`).
+pub fn resolve_config_path(xdg_config_home: Option<&str>, home: Option<&str>) -> PathBuf {
+    resolve_config_dir(xdg_config_home, home).join(CONFIG_FILENAME)
+}
+
+/// Default user config file path resolved from process environment variables.
+pub fn default_config_path() -> PathBuf {
+    let xdg = env::var("XDG_CONFIG_HOME").ok();
+    let home = env::var("HOME").ok();
+    resolve_config_path(xdg.as_deref(), home.as_deref())
 }
 
 /// Resolve the adblock filter-list directory under `$XDG_CONFIG_HOME/nservo/adblock`

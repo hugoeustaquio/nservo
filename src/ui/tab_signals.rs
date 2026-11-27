@@ -4,9 +4,10 @@ use std::rc::Rc;
 use servo_gtk::LoadEvent;
 
 use crate::core::{
-    HistorySync, TabModel, parse_hint_message, parse_inspector_message, parse_scroll_metrics,
-    parse_search_message,
+    HistorySync, TabModel, parse_config_message, parse_hint_message, parse_inspector_message,
+    parse_scroll_metrics, parse_search_message,
 };
+use crate::engine::config_page::{CONFIG_MESSAGE_HANDLER, CONFIG_PAGE_URL};
 use crate::engine::hints_js::HINT_MESSAGE_HANDLER;
 use crate::engine::inspector_js::INSPECTOR_MESSAGE_HANDLER;
 use crate::engine::scroll::SCROLL_MESSAGE_HANDLER;
@@ -109,6 +110,8 @@ pub(super) fn wire_tab_signals(
     let on_hint = callbacks.on_hint_event.clone();
     let on_inspector = callbacks.on_inspector_event.clone();
     let on_search = callbacks.on_search_event.clone();
+    let on_config = callbacks.on_config_event.clone();
+    let model_cfg = model.clone();
     web_tab
         .user_content()
         .connect_script_message_received(move |_, name, body| {
@@ -124,6 +127,15 @@ pub(super) fn wire_tab_signals(
                 && let Some(event) = parse_search_message(body)
             {
                 on_search(id, event);
+            } else if name == CONFIG_MESSAGE_HANDLER
+                && model_cfg
+                    .borrow()
+                    .tabs()
+                    .iter()
+                    .any(|t| t.id == id && t.url == CONFIG_PAGE_URL)
+                && let Some(event) = parse_config_message(body)
+            {
+                on_config(id, event);
             } else if name == SCROLL_MESSAGE_HANDLER
                 && let Some(metrics) = parse_scroll_metrics(body)
             {

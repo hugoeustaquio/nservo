@@ -6,10 +6,11 @@ use gtk::prelude::*;
 use servo_gtk::WebView;
 
 use crate::core::{
-    BookmarkStore, HintEvent, HistoryStore, HistorySync, InspectorEvent, SearchEvent, Session,
-    TabInfo, TabModel,
+    BookmarkStore, BrowserConfig, ConfigEvent, HintEvent, HistoryStore, HistorySync,
+    InspectorEvent, SearchEvent, Session, TabInfo, TabModel,
 };
 use crate::engine::bookmarks_page::{BOOKMARKS_PAGE_URL, render_bookmarks_html};
+use crate::engine::config_page::{CONFIG_PAGE_URL, render_default_config_html};
 use crate::engine::history_page::{HISTORY_PAGE_URL, render_history_html};
 use crate::engine::new_tab_page::{START_PAGE_URL, load_start_page_html};
 use crate::engine::start_page;
@@ -31,6 +32,7 @@ pub struct TabViewCallbacks {
     pub on_hint_event: Rc<dyn Fn(u64, HintEvent)>,
     pub on_inspector_event: Rc<dyn Fn(u64, InspectorEvent)>,
     pub on_search_event: Rc<dyn Fn(u64, SearchEvent)>,
+    pub on_config_event: Rc<dyn Fn(u64, ConfigEvent)>,
     pub on_history_sync: Rc<dyn Fn(HistorySync)>,
     pub on_navigation: Rc<dyn Fn(u64)>,
 }
@@ -63,10 +65,14 @@ impl TabView {
     }
 
     pub fn open_url_in_new_tab(&self, url: &str) {
+        if url == CONFIG_PAGE_URL {
+            let html = render_default_config_html(&BrowserConfig::load_default());
+            self.open_html_in_new_tab(CONFIG_PAGE_URL, "nservo — Config", &html);
+            return;
+        }
         let id = self.insert_tab(url, "", WebTab::new_url(url));
         self.activate_tab_id(id);
     }
-
     pub fn open_html_in_new_tab(&self, url: &str, title: &str, html: &str) {
         let id = self.insert_tab(url, title, WebTab::new_html(html));
         self.activate_tab_id(id);
@@ -99,6 +105,11 @@ impl TabView {
     }
 
     pub fn load_url_in_active_tab(&self, url: &str) {
+        if url == CONFIG_PAGE_URL {
+            let html = render_default_config_html(&BrowserConfig::load_default());
+            self.load_html_in_active_tab(CONFIG_PAGE_URL, "nservo — Config", &html);
+            return;
+        }
         if let Some(id) = self.active_tab_id() {
             {
                 let mut model = self.model.borrow_mut();
@@ -182,20 +193,14 @@ impl TabView {
     pub fn active_web_view(&self) -> Option<WebView> { self.active_tab().map(|tab| tab.view().clone()) }
 
     pub fn reload_active_tab(&self) {
-        let Some(id) = self.active_tab_id() else {
-            return;
-        };
+        let Some(id) = self.active_tab_id() else { return };
         self.model.borrow_mut().set_loading(id, true);
-        if let Some(tab) = self.tab_by_id(id) {
-            tab.view().reload();
-        }
+        if let Some(tab) = self.tab_by_id(id) { tab.view().reload(); }
         (self.callbacks.on_state_changed)();
     }
-
     pub fn focus_active(&self) {
         if let Some(view) = self.active_web_view() { view.grab_focus(); }
     }
-
     pub fn reload_adblock(&self, dir: &str) {
         for entry in self.tabs.borrow().values() { entry.tab.reload_adblock(dir); }
     }
@@ -281,6 +286,9 @@ fn web_tab_for_url(url: &str) -> (&str, WebTab) {
         (HISTORY_PAGE_URL, WebTab::new_html(&render_history_html(&list, None)))
     } else if url == START_PAGE_URL {
         (START_PAGE_URL, WebTab::new_html(&load_start_page_html()))
+    } else if url == CONFIG_PAGE_URL {
+        let html = render_default_config_html(&BrowserConfig::load_default());
+        (CONFIG_PAGE_URL, WebTab::new_html(&html))
     } else if url == "about:help" || url.trim().is_empty() {
         ("about:help", WebTab::new_html(start_page::HELP_PAGE_HTML))
     } else {
