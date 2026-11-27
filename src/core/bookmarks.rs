@@ -66,6 +66,7 @@ fn is_bookmarkable_url(url: &str) -> bool {
     !url.is_empty()
         && !url.eq_ignore_ascii_case("about:blank")
         && !url.eq_ignore_ascii_case("about:help")
+        && !url.eq_ignore_ascii_case("about:start")
         && !url.eq_ignore_ascii_case("about:bookmarks")
         && !url.eq_ignore_ascii_case("about:history")
 }
@@ -99,6 +100,30 @@ impl BookmarkStore {
                 .map_err(BookmarkError::Db)?;
             let rows = stmt
                 .query_map([], |row| {
+                    Ok(Bookmark {
+                        url: row.get(0)?,
+                        title: row.get(1)?,
+                    })
+                })
+                .map_err(BookmarkError::Db)?
+                .collect::<Result<_, _>>()
+                .map_err(BookmarkError::Db)?;
+            Ok(rows)
+        })
+    }
+
+    /// Load up to `limit` saved bookmarks ordered most recently added first.
+    pub fn list_recent(&self, limit: usize) -> Result<Vec<Bookmark>, BookmarkError> {
+        with_db(&self.db_path, |conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT url, title FROM bookmarks
+                     ORDER BY created_at DESC, id DESC
+                     LIMIT ?1",
+                )
+                .map_err(BookmarkError::Db)?;
+            let rows = stmt
+                .query_map(params![i64::try_from(limit).unwrap_or(100)], |row| {
                     Ok(Bookmark {
                         url: row.get(0)?,
                         title: row.get(1)?,

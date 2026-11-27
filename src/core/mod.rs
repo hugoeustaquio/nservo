@@ -1,6 +1,7 @@
 pub mod action;
 pub mod bookmarks;
 pub mod command;
+pub mod completion;
 pub mod hints;
 pub mod history;
 pub mod inspector;
@@ -17,6 +18,10 @@ pub mod text_input;
 pub use action::{BrowserAction, ZOOM_STEP, step_zoom};
 pub use bookmarks::{AddBookmarkOutcome, Bookmark, BookmarkError, BookmarkStore};
 pub use command::{CommandError, normalize_url, parse_command};
+pub use completion::{
+    CompletionItem, CompletionKind, CompletionSources, MAX_COMPLETIONS, complete_command_input,
+    fuzzy_score,
+};
 pub use hints::{HintEvent, generate_hint_labels, parse_hint_message};
 pub use history::{
     HistoryEntry, HistoryError, HistoryStore, HistorySync, is_recordable_history_url,
@@ -35,7 +40,10 @@ pub use search::{SearchEvent, SearchState, format_search_status, parse_search_me
 pub use session::{
     DEFAULT_SESSION_NAME, SavedTab, Session, SessionError, SessionStore, validate_session_name,
 };
-pub use storage::{DB_FILENAME, StorageError, default_db_path, resolve_config_dir, resolve_db_path};
+pub use storage::{
+    DB_FILENAME, STARTPAGE_FILENAME, StorageError, default_db_path, default_startpage_path,
+    resolve_config_dir, resolve_db_path, resolve_startpage_path,
+};
 pub use tab_model::{ClosedTab, TabInfo, TabModel};
 pub use text_input::{
     DeadKey, DeadKeyComposer, LineEdge, WordDirection, compose_dead_key, decode_utf16_units,

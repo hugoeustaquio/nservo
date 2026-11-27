@@ -17,3 +17,4 @@ mod tab_signals;
 pub mod tab_view;
 pub mod window;
 mod window_actions;
+mod window_inspector;

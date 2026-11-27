@@ -110,10 +110,15 @@ fn keymap_handles_f_and_hint_mode_keys() {
 fn hint_scripts_distinguish_current_tab_and_new_tab_modes() {
     let cur = activate_hints_script(false);
     assert!(cur.contains("window.__nservoHintsNewTab = false;"));
+    assert!(cur.contains("findVisibleRect"));
+    assert!(cur.contains("getClientRects"));
+    assert!(cur.contains("shadowRoot"));
+    assert!(cur.contains(r#"[role="tab"]"#));
 
     let new_tab = activate_hints_script(true);
     assert!(new_tab.contains("window.__nservoHintsNewTab = true;"));
     assert!(new_tab.contains("a[href],area[href]"));
+    assert!(new_tab.contains("findVisibleRect"));
 
     let filter = filter_hints_script("a");
     assert!(filter.contains("open_new_tab"));

@@ -57,7 +57,7 @@ pub(super) fn build_console_page() -> (gtk::Box, gtk::TextView, gtk::TextBuffer,
 }
 
 /// Build the DOM tab (left element list + right attributes/styles pane).
-pub(super) fn build_dom_page() -> (gtk::Paned, gtk::ListBox, gtk::TextBuffer) {
+pub(super) fn build_dom_page() -> (gtk::Paned, gtk::ScrolledWindow, gtk::ListBox, gtk::TextBuffer) {
     let list = gtk::ListBox::new();
     list.add_css_class("inspector-dom-list");
     let left_scroll = gtk::ScrolledWindow::builder()
@@ -87,7 +87,7 @@ pub(super) fn build_dom_page() -> (gtk::Paned, gtk::ListBox, gtk::TextBuffer) {
     paned.set_position(480);
     paned.set_vexpand(true);
     paned.set_hexpand(true);
-    (paned, list, details_buf)
+    (paned, left_scroll, list, details_buf)
 }
 
 /// Attach `Up`/`Down` command-history navigation to the REPL `gtk::Entry`.

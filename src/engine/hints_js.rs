@@ -38,22 +38,48 @@ pub fn activate_hints_script(new_tab: bool) -> String {
   var selector = {new_tab_js}
     ? 'a[href],area[href]'
     : [
-        'a[href]',
-        'button',
-        'input:not([type="hidden"])',
-        'textarea',
-        'select',
-        'summary',
-        '[role="link"]',
-        '[role="button"]',
-        '[role="textbox"]',
-        '[role="searchbox"]',
-        '[role="combobox"]',
-        '[contenteditable="true"]',
-        '[contenteditable=""]'
+        'a[href]', 'a[onclick]', 'a[jsaction]', 'a[tabindex]:not([tabindex="-1"])',
+        'area[href]', 'button', 'input:not([type="hidden"])', 'textarea', 'select', 'summary',
+        '[role="link"]', '[role="button"]', '[role="tab"]', '[role="menuitem"]',
+        '[role="textbox"]', '[role="searchbox"]', '[role="combobox"]',
+        '[contenteditable="true"]', '[contenteditable=""]'
       ].join(',');
 
-  var nodes = document.querySelectorAll(selector);
+  function collectNodes(root, out) {{
+    if (!root || !root.querySelectorAll) return;
+    var found = root.querySelectorAll(selector);
+    for (var i = 0; i < found.length; i++) out.push(found[i]);
+    var all = root.querySelectorAll('*');
+    for (var j = 0; j < all.length; j++) {{
+      if (all[j].shadowRoot) collectNodes(all[j].shadowRoot, out);
+    }}
+  }}
+
+  function rectInView(r, vw, vh) {{
+    return r && r.width >= 2 && r.height >= 2
+      && r.bottom > 0 && r.right > 0 && r.top < vh && r.left < vw;
+  }}
+
+  function findVisibleRect(el, vw, vh) {{
+    var r = el.getBoundingClientRect();
+    if (rectInView(r, vw, vh)) return r;
+    if (el.getClientRects) {{
+      var rects = el.getClientRects();
+      for (var k = 0; k < rects.length; k++) {{
+        if (rectInView(rects[k], vw, vh)) return rects[k];
+      }}
+    }}
+    var kids = el.querySelectorAll ? el.querySelectorAll('*') : [];
+    var limit = Math.min(kids.length, 12);
+    for (var c = 0; c < limit; c++) {{
+      var kr = kids[c].getBoundingClientRect();
+      if (rectInView(kr, vw, vh)) return kr;
+    }}
+    return null;
+  }}
+
+  var nodes = [];
+  collectNodes(document, nodes);
   var vw = window.innerWidth || document.documentElement.clientWidth || 0;
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
   var targets = [];
@@ -61,13 +87,12 @@ pub fn activate_hints_script(new_tab: bool) -> String {
   for (var i = 0; i < nodes.length; i++) {{
     var el = nodes[i];
     if (el.disabled) continue;
-    var rect = el.getBoundingClientRect();
-    if (rect.width < 2 || rect.height < 2) continue;
-    if (rect.bottom <= 0 || rect.right <= 0 || rect.top >= vh || rect.left >= vw) continue;
     var style = window.getComputedStyle(el);
     if (!style || style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') <= 0) {{
       continue;
     }}
+    var rect = findVisibleRect(el, vw, vh);
+    if (!rect) continue;
     targets.push({{ el: el, rect: rect }});
   }}
 

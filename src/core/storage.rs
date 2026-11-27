@@ -10,6 +10,9 @@ use rusqlite::Connection;
 /// Unified SQLite database filename stored inside `$XDG_CONFIG_HOME/nservo/`.
 pub const DB_FILENAME: &str = "nservo.db";
 
+/// Optional custom start-page HTML filename stored inside `$XDG_CONFIG_HOME/nservo/`.
+pub const STARTPAGE_FILENAME: &str = "startpage.html";
+
 const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
     name TEXT PRIMARY KEY,
@@ -69,6 +72,19 @@ pub fn default_db_path() -> PathBuf {
     let xdg = env::var("XDG_CONFIG_HOME").ok();
     let home = env::var("HOME").ok();
     resolve_db_path(xdg.as_deref(), home.as_deref())
+}
+
+/// Resolve the optional custom start page path under `$XDG_CONFIG_HOME/nservo/startpage.html`
+/// (falling back to `$HOME/.config/nservo/startpage.html`).
+pub fn resolve_startpage_path(xdg_config_home: Option<&str>, home: Option<&str>) -> PathBuf {
+    resolve_config_dir(xdg_config_home, home).join(STARTPAGE_FILENAME)
+}
+
+/// Default custom start page path resolved from process environment variables.
+pub fn default_startpage_path() -> PathBuf {
+    let xdg = env::var("XDG_CONFIG_HOME").ok();
+    let home = env::var("HOME").ok();
+    resolve_startpage_path(xdg.as_deref(), home.as_deref())
 }
 
 /// Open (creating parent directories if needed) and initialize the SQLite database.

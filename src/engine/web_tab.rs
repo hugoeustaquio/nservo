@@ -18,6 +18,9 @@ use crate::engine::inspector_js::{
     INSPECTOR_MESSAGE_HANDLER, clear_highlight_script, eval_in_page_script, inspect_element_script,
     inspector_init_script, snapshot_dom_script,
 };
+use crate::engine::inspector_picker_js::{
+    start_element_picker_script, stop_element_picker_script,
+};
 use crate::engine::scroll::{
     SCROLL_MESSAGE_HANDLER, jump_scroll_x_script, jump_scroll_y_script, scroll_hide_css,
     scroll_init_script, smooth_scroll_by_script,
@@ -184,6 +187,16 @@ impl WebTab {
     /// Remove any DOM inspector highlight overlay from the page.
     pub fn clear_inspector_highlight(&self) {
         self.view.evaluate_javascript(clear_highlight_script());
+    }
+
+    /// Start interactive element-picker ("Find") mode in the page.
+    pub fn start_element_picker(&self) {
+        self.view.evaluate_javascript(start_element_picker_script());
+    }
+
+    /// Stop interactive element-picker ("Find") mode in the page.
+    pub fn stop_element_picker(&self) {
+        self.view.evaluate_javascript(stop_element_picker_script());
     }
 
     pub fn smooth_scroll_by(&self, dx: f64, dy: f64) {

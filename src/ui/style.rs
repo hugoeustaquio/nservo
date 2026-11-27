@@ -120,6 +120,56 @@ button.tab-button.tab-active label {
     min-height: 22px;
 }
 
+.completion-scroll {
+    background-color: #16161e;
+    border-top: 1px solid #292e42;
+}
+
+.completion-list {
+    background-color: #16161e;
+    padding: 2px 4px;
+    font-size: 12px;
+}
+
+.completion-list row {
+    padding: 3px 6px;
+    border-radius: 3px;
+}
+
+.completion-list row:selected {
+    background-color: #292e42;
+}
+
+.completion-badge {
+    color: #16161e;
+    background-color: #7aa2f7;
+    border-radius: 3px;
+    padding: 0 5px;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.completion-badge.kind-bm {
+    background-color: #9ece6a;
+}
+
+.completion-badge.kind-hist {
+    background-color: #7dcfff;
+}
+
+.completion-badge.kind-sess {
+    background-color: #bb9af7;
+}
+
+.completion-primary {
+    color: #c0caf5;
+    font-weight: bold;
+}
+
+.completion-secondary {
+    color: #787c99;
+}
+
 .inspector-panel {
     background-color: #16161e;
     border-top: 2px solid #292e42;

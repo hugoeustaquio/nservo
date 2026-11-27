@@ -46,6 +46,7 @@ pub enum BrowserAction {
     /// Tab management actions.
     NextTab,
     PrevTab,
+    OpenStartPageInNewTab,
     OpenInCurrentTab(String),
     OpenInNewTab(String),
     CloseTab,

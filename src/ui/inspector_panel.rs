@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use gtk::glib;
 use gtk::prelude::*;
 
 use crate::core::{ConsoleEntry, DomNodeSummary, ElementDetails};
@@ -12,6 +13,7 @@ pub struct InspectorCallbacks {
     pub on_eval_js: Rc<dyn Fn(String)>,
     pub on_refresh_dom: Rc<dyn Fn()>,
     pub on_select_dom_node: Rc<dyn Fn(usize)>,
+    pub on_toggle_picker: Rc<dyn Fn()>,
     pub on_clear_console: Rc<dyn Fn()>,
     pub on_close: Rc<dyn Fn()>,
 }
@@ -21,14 +23,17 @@ pub struct InspectorCallbacks {
 pub struct InspectorPanel {
     root: gtk::Box,
     stack: gtk::Stack,
+    find_btn: gtk::Button,
     console_tab_btn: gtk::Button,
     dom_tab_btn: gtk::Button,
     console_view: gtk::TextView,
     console_buffer: gtk::TextBuffer,
     repl_entry: gtk::Entry,
+    dom_scroll: gtk::ScrolledWindow,
     dom_list: gtk::ListBox,
     dom_details: gtk::TextBuffer,
     dom_indices: Rc<RefCell<Vec<usize>>>,
+    picker_active: Rc<Cell<bool>>,
     history: Rc<RefCell<Vec<String>>>,
     history_pos: Rc<Cell<Option<usize>>>,
 }
@@ -43,6 +48,8 @@ impl InspectorPanel {
         let header = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         header.add_css_class("inspector-header");
 
+        let find_btn = make_header_btn("Find");
+        find_btn.set_tooltip_text(Some("Pick an element on the page to inspect in DOM view"));
         let console_tab_btn = make_header_btn("Console");
         console_tab_btn.add_css_class("inspector-tab-active");
         let dom_tab_btn = make_header_btn("DOM");
@@ -54,6 +61,7 @@ impl InspectorPanel {
         let clear_btn = make_header_btn("Clear");
         let close_btn = make_header_btn("×");
 
+        header.append(&find_btn);
         header.append(&console_tab_btn);
         header.append(&dom_tab_btn);
         header.append(&spacer);
@@ -62,7 +70,7 @@ impl InspectorPanel {
         header.append(&close_btn);
 
         let (console_page, console_view, console_buffer, repl_entry) = build_console_page();
-        let (dom_page, dom_list, dom_details) = build_dom_page();
+        let (dom_page, dom_scroll, dom_list, dom_details) = build_dom_page();
 
         let stack = gtk::Stack::new();
         stack.set_vexpand(true);
@@ -77,14 +85,17 @@ impl InspectorPanel {
         let panel = Self {
             root,
             stack,
+            find_btn,
             console_tab_btn,
             dom_tab_btn,
             console_view,
             console_buffer,
             repl_entry,
+            dom_scroll,
             dom_list,
             dom_details,
             dom_indices: Rc::new(RefCell::new(Vec::new())),
+            picker_active: Rc::new(Cell::new(false)),
             history: Rc::new(RefCell::new(Vec::new())),
             history_pos: Rc::new(Cell::new(None)),
         };
@@ -103,6 +114,25 @@ impl InspectorPanel {
 
     pub fn is_dom_tab_active(&self) -> bool {
         self.stack.visible_child_name().as_deref() == Some("dom")
+    }
+
+    pub fn show_dom_tab(&self) {
+        self.stack.set_visible_child_name("dom");
+        self.dom_tab_btn.add_css_class("inspector-tab-active");
+        self.console_tab_btn.remove_css_class("inspector-tab-active");
+    }
+
+    pub fn is_picker_active(&self) -> bool {
+        self.picker_active.get()
+    }
+
+    pub fn set_picker_active(&self, active: bool) {
+        self.picker_active.set(active);
+        if active {
+            self.find_btn.add_css_class("inspector-tab-active");
+        } else {
+            self.find_btn.remove_css_class("inspector-tab-active");
+        }
     }
 
     pub fn set_open(&self, open: bool) {
@@ -155,6 +185,21 @@ impl InspectorPanel {
         }
     }
 
+    pub fn select_dom_node(&self, node_index: usize) {
+        let pos = self.dom_indices.borrow().iter().position(|&idx| idx == node_index);
+        let Some(row_idx) = pos.and_then(|p| i32::try_from(p).ok()) else { return };
+        let Some(row) = self.dom_list.row_at_index(row_idx) else { return };
+        self.dom_list.select_row(Some(&row));
+        let (list, scroll) = (self.dom_list.clone(), self.dom_scroll.clone());
+        glib::idle_add_local_once(move || {
+            if let Some(bounds) = row.compute_bounds(&list) {
+                let adj = scroll.vadjustment();
+                let target = f64::from(bounds.y()) - (adj.page_size() - f64::from(bounds.height())) / 2.0;
+                adj.set_value(target.clamp(adj.lower(), (adj.upper() - adj.page_size()).max(0.0)));
+            }
+        });
+    }
+
     pub fn set_element_details(&self, details: &ElementDetails) {
         self.dom_details.set_text(&details.format_text());
     }
@@ -200,6 +245,9 @@ impl InspectorPanel {
             c_btn.remove_css_class("inspector-tab-active");
             on_refresh();
         });
+
+        let on_toggle_picker = callbacks.on_toggle_picker.clone();
+        self.find_btn.connect_clicked(move |_| on_toggle_picker());
 
         let on_refresh = callbacks.on_refresh_dom.clone();
         refresh_btn.connect_clicked(move |_| on_refresh());

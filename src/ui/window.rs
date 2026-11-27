@@ -73,18 +73,18 @@ impl BrowserWindow {
         };
 
         let command_bar = {
-            let slot = controller_slot.clone();
-            CommandBar::new(move |raw| {
-                if let Some(ctrl) = get_ctrl(&slot) {
-                    ctrl.submit_prompt(&raw);
-                }
-            })
+            let (s_sub, s_cmp) = (controller_slot.clone(), controller_slot.clone());
+            CommandBar::new(
+                move |raw| { if let Some(c) = get_ctrl(&s_sub) { c.submit_prompt(&raw); } },
+                move || get_ctrl(&s_cmp).map(|c| c.load_completion_sources()).unwrap_or_default(),
+            )
         };
 
         let inspector = {
             let s_eval = controller_slot.clone();
             let s_ref = controller_slot.clone();
             let s_sel = controller_slot.clone();
+            let s_pick = controller_slot.clone();
             let s_clr = controller_slot.clone();
             let s_cls = controller_slot.clone();
             InspectorPanel::new(InspectorCallbacks {
@@ -96,6 +96,9 @@ impl BrowserWindow {
                 }),
                 on_select_dom_node: Rc::new(move |idx| {
                     if let Some(c) = get_ctrl(&s_sel) { c.inspect_dom_node(idx); }
+                }),
+                on_toggle_picker: Rc::new(move || {
+                    if let Some(c) = get_ctrl(&s_pick) { c.toggle_element_picker(); }
                 }),
                 on_clear_console: Rc::new(move || {
                     if let Some(c) = get_ctrl(&s_clr) { c.clear_active_console(); }

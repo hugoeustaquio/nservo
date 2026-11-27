@@ -1,10 +1,10 @@
 use gtk::prelude::*;
 
 use crate::core::{
-    BrowserAction, ConsoleEntry, ConsoleLevel, HintEvent, InspectorEvent, Mode, SearchEvent,
-    ZOOM_STEP, step_zoom,
+    BookmarkStore, BrowserAction, CompletionSources, HintEvent, HistoryStore, Mode, SearchEvent,
+    SessionStore, ZOOM_STEP, step_zoom,
 };
-use crate::engine::{scroll, start_page};
+use crate::engine::{new_tab_page, scroll, start_page};
 use crate::ui::window::BrowserWindow;
 
 impl BrowserWindow {
@@ -43,7 +43,9 @@ impl BrowserWindow {
                 self.search.step(&self.tab_view, &self.status_bar, -1);
             }
             BrowserAction::ClearSearch => {
-                if self.search.clear(&self.tab_view) {
+                if self.inspector.is_picker_active() {
+                    self.stop_element_picker();
+                } else if self.search.clear(&self.tab_view) {
                     self.sync_chrome();
                 }
             }
@@ -85,6 +87,11 @@ impl BrowserWindow {
             | BrowserAction::ScrollBottom => {}
             BrowserAction::NextTab => self.tab_view.next_tab(),
             BrowserAction::PrevTab => self.tab_view.prev_tab(),
+            BrowserAction::OpenStartPageInNewTab => {
+                let html = new_tab_page::load_start_page_html();
+                self.tab_view
+                    .open_html_in_new_tab(new_tab_page::START_PAGE_URL, "New Tab", &html);
+            }
             BrowserAction::OpenInCurrentTab(url) => self.tab_view.load_url_in_active_tab(&url),
             BrowserAction::OpenInNewTab(url) => self.tab_view.open_url_in_new_tab(&url),
             BrowserAction::CloseTab if !self.tab_view.close_active_tab() => self.window.close(),
@@ -146,100 +153,23 @@ impl BrowserWindow {
         }
     }
 
+    pub(super) fn load_completion_sources(&self) -> CompletionSources {
+        CompletionSources {
+            bookmarks: BookmarkStore::default_store()
+                .list_recent(100)
+                .unwrap_or_default(),
+            history: HistoryStore::default_store()
+                .recent(200)
+                .unwrap_or_default(),
+            sessions: SessionStore::default_store()
+                .list_names()
+                .unwrap_or_default(),
+        }
+    }
+
     pub(super) fn handle_navigation(&self, tab_id: u64) {
         if self.mode.get() == Mode::Insert && self.tab_view.active_tab_id() == Some(tab_id) {
             self.set_mode(Mode::Normal);
-        }
-    }
-
-    pub(super) fn set_inspector_open(&self, open: bool) {
-        self.inspector.set_open(open);
-        if open {
-            if let Some(tab_id) = self.tab_view.active_tab_id() {
-                self.last_inspected_tab.set(Some(tab_id));
-                let entries = self.console_store.borrow().entries(tab_id);
-                self.inspector.render_console(&entries);
-            }
-            self.refresh_inspector_dom();
-        } else {
-            if let Some(tab) = self.tab_view.active_tab() {
-                tab.clear_inspector_highlight();
-            }
-            self.tab_view.focus_active();
-        }
-    }
-
-    pub(super) fn sync_inspector_for_active_tab(&self, active_id: Option<u64>) {
-        if self.last_inspected_tab.get() == active_id {
-            return;
-        }
-        self.last_inspected_tab.set(active_id);
-        if !self.inspector.is_open() {
-            return;
-        }
-        self.inspector.clear_dom();
-        if let Some(tab_id) = active_id {
-            let entries = self.console_store.borrow().entries(tab_id);
-            self.inspector.render_console(&entries);
-            if self.inspector.is_dom_tab_active() {
-                self.refresh_inspector_dom();
-            }
-        }
-    }
-
-    pub(super) fn eval_inspector_js(&self, expr: &str) {
-        let Some(tab_id) = self.tab_view.active_tab_id() else {
-            return;
-        };
-        let entry = ConsoleEntry {
-            level: ConsoleLevel::Input,
-            text: expr.to_string(),
-        };
-        self.console_store.borrow_mut().push(tab_id, entry.clone());
-        self.inspector.append_console_entry(&entry);
-        if let Some(tab) = self.tab_view.active_tab() {
-            tab.eval_inspector_js(expr);
-        }
-    }
-
-    pub(super) fn refresh_inspector_dom(&self) {
-        if let Some(tab) = self.tab_view.active_tab() {
-            tab.request_dom_snapshot();
-        }
-    }
-
-    pub(super) fn inspect_dom_node(&self, index: usize) {
-        if let Some(tab) = self.tab_view.active_tab() {
-            tab.inspect_dom_node(index);
-        }
-    }
-
-    pub(super) fn clear_active_console(&self) {
-        if let Some(tab_id) = self.tab_view.active_tab_id() {
-            self.console_store.borrow_mut().clear(tab_id);
-            self.inspector.render_console(&[]);
-        }
-    }
-
-    pub(super) fn handle_inspector_event(&self, tab_id: u64, event: InspectorEvent) {
-        let is_active = self.tab_view.active_tab_id() == Some(tab_id);
-        match event {
-            InspectorEvent::Console(entry) => {
-                self.console_store.borrow_mut().push(tab_id, entry.clone());
-                if is_active && self.inspector.is_open() {
-                    self.inspector.append_console_entry(&entry);
-                }
-            }
-            InspectorEvent::DomTree(nodes) => {
-                if is_active {
-                    self.inspector.set_dom_nodes(&nodes);
-                }
-            }
-            InspectorEvent::ElementDetails(details) => {
-                if is_active {
-                    self.inspector.set_element_details(&details);
-                }
-            }
         }
     }
 

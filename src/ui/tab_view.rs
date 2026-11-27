@@ -11,6 +11,7 @@ use crate::core::{
 };
 use crate::engine::bookmarks_page::{BOOKMARKS_PAGE_URL, render_bookmarks_html};
 use crate::engine::history_page::{HISTORY_PAGE_URL, render_history_html};
+use crate::engine::new_tab_page::{START_PAGE_URL, load_start_page_html};
 use crate::engine::start_page;
 use crate::engine::web_tab::WebTab;
 use crate::ui::page_overlay::PageOverlay;
@@ -132,23 +133,17 @@ impl TabView {
 
     pub fn select_index(&self, index: usize) {
         let id = self.model.borrow_mut().select_index(index);
-        if let Some(id) = id {
-            self.activate_tab_id(id);
-        }
+        if let Some(id) = id { self.activate_tab_id(id); }
     }
 
     pub fn next_tab(&self) {
         let id = self.model.borrow_mut().next_tab();
-        if let Some(id) = id {
-            self.activate_tab_id(id);
-        }
+        if let Some(id) = id { self.activate_tab_id(id); }
     }
 
     pub fn prev_tab(&self) {
         let id = self.model.borrow_mut().prev_tab();
-        if let Some(id) = id {
-            self.activate_tab_id(id);
-        }
+        if let Some(id) = id { self.activate_tab_id(id); }
     }
 
     /// Close the active tab. Returns `true` if tabs remain open, `false` if empty.
@@ -290,6 +285,8 @@ fn web_tab_for_url(url: &str) -> (&str, WebTab) {
     } else if url == HISTORY_PAGE_URL {
         let list = HistoryStore::default_store().recent(200).unwrap_or_default();
         (HISTORY_PAGE_URL, WebTab::new_html(&render_history_html(&list, None)))
+    } else if url == START_PAGE_URL {
+        (START_PAGE_URL, WebTab::new_html(&load_start_page_html()))
     } else if url == "about:help" || url.trim().is_empty() {
         ("about:help", WebTab::new_html(start_page::HELP_PAGE_HTML))
     } else {

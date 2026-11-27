@@ -136,6 +136,11 @@ impl ElementDetails {
 pub enum InspectorEvent {
     Console(ConsoleEntry),
     DomTree(Vec<DomNodeSummary>),
+    ElementPicked {
+        nodes: Vec<DomNodeSummary>,
+        selected_index: usize,
+    },
+    PickerCancelled,
     ElementDetails(ElementDetails),
 }
 
@@ -162,6 +167,11 @@ enum RawInspectorEvent {
     DomTree {
         nodes: Vec<RawDomNode>,
     },
+    ElementPicked {
+        nodes: Vec<RawDomNode>,
+        selected_index: usize,
+    },
+    PickerCancelled,
     ElementDetails {
         selector: String,
         #[serde(default)]
@@ -183,19 +193,15 @@ pub fn parse_inspector_message(body: &str) -> Option<InspectorEvent> {
             level: ConsoleLevel::parse(&level),
             text,
         }),
-        RawInspectorEvent::DomTree { nodes } => InspectorEvent::DomTree(
-            nodes
-                .into_iter()
-                .map(|n| DomNodeSummary {
-                    index: n.index,
-                    depth: n.depth,
-                    tag: n.tag,
-                    id: n.id,
-                    classes: n.classes,
-                    text_preview: n.text,
-                })
-                .collect(),
-        ),
+        RawInspectorEvent::DomTree { nodes } => InspectorEvent::DomTree(convert_dom_nodes(nodes)),
+        RawInspectorEvent::ElementPicked {
+            nodes,
+            selected_index,
+        } => InspectorEvent::ElementPicked {
+            nodes: convert_dom_nodes(nodes),
+            selected_index,
+        },
+        RawInspectorEvent::PickerCancelled => InspectorEvent::PickerCancelled,
         RawInspectorEvent::ElementDetails {
             selector,
             rect,
@@ -210,6 +216,20 @@ pub fn parse_inspector_message(body: &str) -> Option<InspectorEvent> {
             outer_html,
         }),
     })
+}
+
+fn convert_dom_nodes(nodes: Vec<RawDomNode>) -> Vec<DomNodeSummary> {
+    nodes
+        .into_iter()
+        .map(|n| DomNodeSummary {
+            index: n.index,
+            depth: n.depth,
+            tag: n.tag,
+            id: n.id,
+            classes: n.classes,
+            text_preview: n.text,
+        })
+        .collect()
 }
 
 /// Bounded per-tab console log store so switching tabs preserves each tab's logs.

@@ -66,6 +66,7 @@ pub const HELP_PAGE_HTML: &str = r#"<!DOCTYPE html>
   <table>
     <tr><td>:open &lt;URL|query&gt;</td><td>Open URL or Google Search in the current tab (alias: <code>:o</code>)</td></tr>
     <tr><td>:Open &lt;URL|query&gt;</td><td>Open URL or Google Search in a new tab (aliases: <code>:O</code>, <code>:tabopen</code>)</td></tr>
+    <tr><td>:tabnew [URL]</td><td>Open a new tab with the starter page (or optional URL/query)</td></tr>
     <tr><td>:tabnext / :tabprev</td><td>Switch to next / previous tab</td></tr>
     <tr><td>:tabclose</td><td>Close current tab (aliases: <code>:tc</code>, <code>:bd</code>)</td></tr>
     <tr><td>:reload / :back / :forward</td><td>Page navigation controls</td></tr>

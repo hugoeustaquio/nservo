@@ -6,6 +6,9 @@ use nservo::engine::inspector_js::{
     INSPECTOR_MESSAGE_HANDLER, clear_highlight_script, eval_in_page_script, inspect_element_script,
     inspector_init_script, snapshot_dom_script,
 };
+use nservo::engine::inspector_picker_js::{
+    start_element_picker_script, stop_element_picker_script,
+};
 
 #[test]
 fn parses_console_dom_and_element_details_messages() {
@@ -124,4 +127,45 @@ fn inspector_scripts_protect_servo_ipc_and_encode_expressions() {
     assert!(snapshot_dom_script().contains("dom_tree"));
     assert!(inspect_element_script(3).contains("refs[3]"));
     assert!(clear_highlight_script().contains("nservo-inspector-highlight"));
+
+    let start_picker = start_element_picker_script();
+    assert!(start_picker.contains("element_picked"));
+    assert!(start_picker.contains("picker_cancelled"));
+    assert!(start_picker.contains("selected_index"));
+    assert!(stop_element_picker_script().contains("__nservoPickerStop"));
+}
+
+#[test]
+fn parses_element_picked_and_picker_cancelled_events() {
+    let picked = parse_inspector_message(
+        r#"{"kind":"element_picked","selected_index":1,"nodes":[{"index":0,"depth":0,"tag":"html"},{"index":1,"depth":1,"tag":"button","id":"go","classes":"primary","text":"Go"}]}"#,
+    );
+    assert_eq!(
+        picked,
+        Some(InspectorEvent::ElementPicked {
+            selected_index: 1,
+            nodes: vec![
+                DomNodeSummary {
+                    index: 0,
+                    depth: 0,
+                    tag: "html".to_string(),
+                    id: String::new(),
+                    classes: String::new(),
+                    text_preview: String::new(),
+                },
+                DomNodeSummary {
+                    index: 1,
+                    depth: 1,
+                    tag: "button".to_string(),
+                    id: "go".to_string(),
+                    classes: "primary".to_string(),
+                    text_preview: "Go".to_string(),
+                },
+            ],
+        })
+    );
+    assert_eq!(
+        parse_inspector_message(r#"{"kind":"picker_cancelled"}"#),
+        Some(InspectorEvent::PickerCancelled)
+    );
 }

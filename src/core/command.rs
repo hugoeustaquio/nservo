@@ -43,8 +43,15 @@ pub fn parse_command(raw: &str) -> Result<BrowserAction, CommandError> {
 
     match name {
         "open" | "o" => parse_url_arg(rest, ":open <URL>").map(BrowserAction::OpenInCurrentTab),
-        "Open" | "O" | "tabopen" | "tabnew" => {
+        "Open" | "O" | "tabopen" => {
             parse_url_arg(rest, ":Open <URL>").map(BrowserAction::OpenInNewTab)
+        }
+        "tabnew" => {
+            if rest.is_empty() {
+                Ok(BrowserAction::OpenStartPageInNewTab)
+            } else {
+                Ok(BrowserAction::OpenInNewTab(normalize_url(rest)))
+            }
         }
         "tabnext" | "tabn" => Ok(BrowserAction::NextTab),
         "tabprev" | "tabp" | "tabprevious" => Ok(BrowserAction::PrevTab),

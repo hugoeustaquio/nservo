@@ -118,7 +118,8 @@ Press `:` to open the command bar and run Ex-style commands:
 | Command | Aliases | Description |
 | :--- | :--- | :--- |
 | `:open <URL\|query>` | `:o` | Open a URL or Google Search in the current tab |
-| `:Open <URL\|query>` | `:O`, `:tabopen`, `:tabnew` | Open a URL or Google Search in a new tab |
+| `:Open <URL\|query>` | `:O`, `:tabopen` | Open a URL or Google Search in a new tab |
+| `:tabnew [URL\|query]` | — | Open a new tab with the starter page (`$XDG_CONFIG_HOME/nservo/startpage.html` if present, else search bar + recent bookmarks + history) or an optional URL |
 | `:tabnext` | `:tabn` | Switch to the next tab |
 | `:tabprev` | `:tabp`, `:tabprevious` | Switch to the previous tab |
 | `:tabclose` | `:tabc`, `:tc`, `:bd`, `:close` | Close the current tab |
