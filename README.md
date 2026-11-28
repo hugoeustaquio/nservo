@@ -1,7 +1,7 @@
 # nservo
 
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-2026%20edition-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-2024%20edition-orange.svg)](https://www.rust-lang.org/)
 [![Engine: Servo](https://img.shields.io/badge/Engine-Servo%20(servo--gtk)-teal.svg)](https://github.com/nacho/servo-gtk)
 [![UI: GTK4](https://img.shields.io/badge/UI-GTK4-4a86cf.svg)](https://gtk.org/)
 
