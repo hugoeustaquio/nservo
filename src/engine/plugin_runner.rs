@@ -75,8 +75,7 @@ pub fn update_plugins(plugins_dir: &Path, target: Option<&str>) -> UpdatePlugins
         Some(name) => installed
             .into_iter()
             .filter(|p| {
-                p.manifest.name == name
-                    || p.dir.file_name().and_then(|n| n.to_str()) == Some(name)
+                p.manifest.name == name || p.dir.file_name().and_then(|n| n.to_str()) == Some(name)
             })
             .collect(),
         None => installed,
@@ -124,8 +123,7 @@ pub fn remove_plugin(plugins_dir: &Path, name: &str) -> Result<String, String> {
     let plugin = installed
         .into_iter()
         .find(|p| {
-            p.manifest.name == name
-                || p.dir.file_name().and_then(|n| n.to_str()) == Some(name)
+            p.manifest.name == name || p.dir.file_name().and_then(|n| n.to_str()) == Some(name)
         })
         .ok_or_else(|| format!("Plugin '{name}' is not installed"))?;
     fs::remove_dir_all(&plugin.dir)
@@ -154,8 +152,9 @@ pub fn build_page_js_payload(
         let css = fs::read_to_string(&style_path)
             .map_err(|e| format!("Failed to read {}: {e}", style_path.display()))?;
         let css_json = serde_json::to_string(&css).unwrap_or_else(|_| "\"\"".to_string());
-        let id_json = serde_json::to_string(&format!("nservo-plugin-style-{}", plugin.manifest.name))
-            .unwrap_or_else(|_| "\"nservo-plugin-style\"".to_string());
+        let id_json =
+            serde_json::to_string(&format!("nservo-plugin-style-{}", plugin.manifest.name))
+                .unwrap_or_else(|_| "\"nservo-plugin-style\"".to_string());
         format!(
             "var __sid={id_json};var __st=document.getElementById(__sid);\
              if(!__st){{__st=document.createElement('style');__st.id=__sid;\

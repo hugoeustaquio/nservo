@@ -7,6 +7,7 @@ use gtk::prelude::*;
 
 use crate::core::{DebuggerEvent, StepAction, format_scope_bindings};
 use crate::engine::rdp_client::{DebuggerCommand, RdpDebuggerClient};
+use crate::ui::debugger_layout::{append_row, build_debugger_widgets, clear_list};
 use crate::ui::debugger_state::DebuggerState;
 
 const POLL_MS: Duration = Duration::from_millis(50);
@@ -27,67 +28,25 @@ pub struct DebuggerView {
 
 impl DebuggerView {
     pub fn new() -> Self {
-        let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-        toolbar.add_css_class("debugger-toolbar");
-
-        let status_lbl = gtk::Label::new(Some("Disconnected"));
-        status_lbl.add_css_class("debugger-status");
-        let action_btns = ["Pause", "Continue", "Over", "In", "Out", "Refresh"].map(make_btn);
-        let bp_entry = gtk::Entry::new();
-        bp_entry.set_width_chars(6);
-        bp_entry.set_placeholder_text(Some("Line"));
-        bp_entry.add_css_class("command-entry");
-        let bp_btn = make_btn("Toggle BP");
-
-        let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        spacer.set_hexpand(true);
-        for b in &action_btns[..5] { toolbar.append(b); }
-        toolbar.append(&bp_entry);
-        toolbar.append(&bp_btn);
-        toolbar.append(&action_btns[5]);
-        toolbar.append(&spacer);
-        toolbar.append(&status_lbl);
-
-        let sources_list = gtk::ListBox::new();
-        sources_list.add_css_class("inspector-dom-list");
-        let source_buf = gtk::TextBuffer::new(None);
-        source_buf.set_text("Select a script on the left to inspect or set breakpoints.");
-        let frames_list = gtk::ListBox::new();
-        frames_list.add_css_class("inspector-dom-list");
-        let scopes_buf = gtk::TextBuffer::new(None);
-        scopes_buf.set_text("Pause execution or hit a breakpoint to inspect local scopes.");
-
-        let right_paned = gtk::Paned::new(gtk::Orientation::Vertical);
-        right_paned.set_start_child(Some(&scroll_wrap(&frames_list)));
-        right_paned.set_end_child(Some(&scroll_wrap(&mono_text_view(&scopes_buf))));
-        right_paned.set_position(100);
-
-        let inner_paned = gtk::Paned::new(gtk::Orientation::Horizontal);
-        inner_paned.set_start_child(Some(&scroll_wrap(&mono_text_view(&source_buf))));
-        inner_paned.set_end_child(Some(&right_paned));
-        inner_paned.set_position(520);
-
-        let outer_paned = gtk::Paned::new(gtk::Orientation::Horizontal);
-        outer_paned.set_start_child(Some(&scroll_wrap(&sources_list)));
-        outer_paned.set_end_child(Some(&inner_paned));
-        outer_paned.set_position(220);
-        outer_paned.set_vexpand(true);
-        outer_paned.set_hexpand(true);
-
-        root.append(&toolbar);
-        root.append(&outer_paned);
-
+        let w = build_debugger_widgets();
         let view = Self {
-            root, status_lbl, bp_entry, sources_list, source_buf, frames_list, scopes_buf,
+            root: w.root,
+            status_lbl: w.status_lbl,
+            bp_entry: w.bp_entry,
+            sources_list: w.sources_list,
+            source_buf: w.source_buf,
+            frames_list: w.frames_list,
+            scopes_buf: w.scopes_buf,
             state: Rc::new(RefCell::new(DebuggerState::default())),
             polling: Rc::new(Cell::new(false)),
         };
-        view.wire(action_btns, bp_btn);
+        view.wire(w.action_btns, w.bp_btn);
         view
     }
 
-    pub fn widget(&self) -> &gtk::Box { &self.root }
+    pub fn widget(&self) -> &gtk::Box {
+        &self.root
+    }
 
     /// Attach to `tab_id`'s Servo DevTools RDP server (if not already attached).
     pub fn connect_to_tab(&self, tab_id: u64, endpoint: Option<(u16, String)>) {
@@ -98,7 +57,10 @@ impl DebuggerView {
         };
         {
             let st = self.state.borrow();
-            if st.connected_tab == Some(tab_id) && st.connected_port == Some(port) && st.client.is_some() {
+            if st.connected_tab == Some(tab_id)
+                && st.connected_port == Some(port)
+                && st.client.is_some()
+            {
                 st.send(DebuggerCommand::RefreshSources);
                 return;
             }
@@ -139,7 +101,8 @@ impl DebuggerView {
         let this = self.clone();
         bp_btn.connect_clicked(move |_| this.toggle_breakpoint_from_entry());
         let this = self.clone();
-        self.bp_entry.connect_activate(move |_| this.toggle_breakpoint_from_entry());
+        self.bp_entry
+            .connect_activate(move |_| this.toggle_breakpoint_from_entry());
 
         let bp_entry = self.bp_entry.clone();
         self.source_buf.connect_cursor_position_notify(move |buf| {
@@ -149,10 +112,14 @@ impl DebuggerView {
 
         let this = self.clone();
         self.sources_list.connect_row_selected(move |_, row| {
-            if let Some(row) = row && let Ok(idx) = usize::try_from(row.index()) {
+            if let Some(row) = row
+                && let Ok(idx) = usize::try_from(row.index())
+            {
                 let actor = {
                     let mut st = this.state.borrow_mut();
-                    let Some(src) = st.sources.get(idx) else { return };
+                    let Some(src) = st.sources.get(idx) else {
+                        return;
+                    };
                     let a = src.actor.clone();
                     st.selected_actor = Some(a.clone());
                     a
@@ -164,7 +131,9 @@ impl DebuggerView {
 
         let this = self.clone();
         self.frames_list.connect_row_selected(move |_, row| {
-            if let Some(row) = row && let Ok(idx) = usize::try_from(row.index()) {
+            if let Some(row) = row
+                && let Ok(idx) = usize::try_from(row.index())
+            {
                 let actor = this.state.borrow().frames.get(idx).map(|f| f.actor.clone());
                 if let Some(a) = actor {
                     this.state.borrow().send(DebuggerCommand::LoadScope(a));
@@ -174,39 +143,70 @@ impl DebuggerView {
     }
 
     fn ensure_polling(&self) {
-        if self.polling.replace(true) { return; }
+        if self.polling.replace(true) {
+            return;
+        }
         let this = self.clone();
         glib::timeout_add_local(POLL_MS, move || {
             let mut events = Vec::new();
-                let has_client = {
-                    let st = this.state.borrow();
-                    if let Some(c) = st.client.as_ref() {
-                        while let Some(ev) = c.try_recv() { events.push(ev); }
-                        true
-                    } else { false }
-                };
-            for ev in events { this.handle_event(ev); }
-            if has_client { glib::ControlFlow::Continue } else { this.polling.set(false); glib::ControlFlow::Break }
+            let has_client = {
+                let st = this.state.borrow();
+                if let Some(c) = st.client.as_ref() {
+                    while let Some(ev) = c.try_recv() {
+                        events.push(ev);
+                    }
+                    true
+                } else {
+                    false
+                }
+            };
+            for ev in events {
+                this.handle_event(ev);
+            }
+            if has_client {
+                glib::ControlFlow::Continue
+            } else {
+                this.polling.set(false);
+                glib::ControlFlow::Break
+            }
         });
     }
 
     fn handle_event(&self, event: DebuggerEvent) {
         match event {
-            DebuggerEvent::Connected { port } => self.set_status(&format!("Running (:{port})"), false),
+            DebuggerEvent::Connected { port } => {
+                self.set_status(&format!("Running (:{port})"), false)
+            }
             DebuggerEvent::Sources(sources) => {
                 self.state.borrow_mut().sources = sources;
                 clear_list(&self.sources_list);
-                for src in &self.state.borrow().sources { append_row(&self.sources_list, &src.display_label()); }
+                for src in &self.state.borrow().sources {
+                    append_row(&self.sources_list, &src.display_label());
+                }
             }
             DebuggerEvent::SourceContent { actor, content } => {
-                self.state.borrow_mut().source_text.insert(actor.clone(), content);
-                if self.state.borrow().selected_actor.as_deref() == Some(actor.as_str()) { self.render_selected_source(); }
+                self.state
+                    .borrow_mut()
+                    .source_text
+                    .insert(actor.clone(), content);
+                if self.state.borrow().selected_actor.as_deref() == Some(actor.as_str()) {
+                    self.render_selected_source();
+                }
             }
             DebuggerEvent::BreakableLines { actor, lines } => {
-                self.state.borrow_mut().breakable.insert(actor.clone(), lines.into_iter().collect());
-                if self.state.borrow().selected_actor.as_deref() == Some(actor.as_str()) { self.render_selected_source(); }
+                self.state
+                    .borrow_mut()
+                    .breakable
+                    .insert(actor.clone(), lines.into_iter().collect());
+                if self.state.borrow().selected_actor.as_deref() == Some(actor.as_str()) {
+                    self.render_selected_source();
+                }
             }
-            DebuggerEvent::Paused { reason, source_actor, line } => {
+            DebuggerEvent::Paused {
+                reason,
+                source_actor,
+                line,
+            } => {
                 self.set_status(&format!("Paused ({reason})"), true);
                 {
                     let mut st = self.state.borrow_mut();
@@ -214,7 +214,9 @@ impl DebuggerView {
                     st.paused_line = line;
                     if let Some(a) = source_actor {
                         st.selected_actor = Some(a.clone());
-                        if !st.source_text.contains_key(&a) { st.send(DebuggerCommand::LoadSource(a)); }
+                        if !st.source_text.contains_key(&a) {
+                            st.send(DebuggerCommand::LoadSource(a));
+                        }
                     }
                 }
                 self.render_selected_source();
@@ -222,9 +224,13 @@ impl DebuggerView {
             DebuggerEvent::Frames(frames) => {
                 self.state.borrow_mut().frames = frames;
                 clear_list(&self.frames_list);
-                for frame in &self.state.borrow().frames { append_row(&self.frames_list, &frame.display_line()); }
+                for frame in &self.state.borrow().frames {
+                    append_row(&self.frames_list, &frame.display_line());
+                }
             }
-            DebuggerEvent::ScopeBindings { bindings, .. } => self.scopes_buf.set_text(&format_scope_bindings(&bindings)),
+            DebuggerEvent::ScopeBindings { bindings, .. } => {
+                self.scopes_buf.set_text(&format_scope_bindings(&bindings))
+            }
             DebuggerEvent::Resumed => {
                 let port = self.state.borrow().connected_port.unwrap_or(0);
                 self.set_status(&format!("Running (:{port})"), false);
@@ -246,9 +252,18 @@ impl DebuggerView {
     }
 
     fn toggle_breakpoint_from_entry(&self) {
-        let Ok(line) = self.bp_entry.text().trim().parse::<u32>() else { return };
-        let Some((url, enable)) = self.state.borrow_mut().toggle_breakpoint(line) else { return };
-        self.state.borrow().send(DebuggerCommand::ToggleBreakpoint { source_url: url, line, column: 0, enable });
+        let Ok(line) = self.bp_entry.text().trim().parse::<u32>() else {
+            return;
+        };
+        let Some((url, enable)) = self.state.borrow_mut().toggle_breakpoint(line) else {
+            return;
+        };
+        self.state.borrow().send(DebuggerCommand::ToggleBreakpoint {
+            source_url: url,
+            line,
+            column: 0,
+            enable,
+        });
         self.render_selected_source();
     }
 
@@ -261,37 +276,17 @@ impl DebuggerView {
     fn reset_ui(&self) {
         clear_list(&self.sources_list);
         clear_list(&self.frames_list);
-        self.source_buf.set_text("Select a script on the left to inspect or set breakpoints.");
-        self.scopes_buf.set_text("Pause execution or hit a breakpoint to inspect local scopes.");
+        self.source_buf
+            .set_text("Select a script on the left to inspect or set breakpoints.");
+        self.scopes_buf
+            .set_text("Pause execution or hit a breakpoint to inspect local scopes.");
     }
     fn set_status(&self, text: &str, paused: bool) {
         self.status_lbl.set_text(text);
-        if paused { self.status_lbl.add_css_class("debugger-paused"); } else { self.status_lbl.remove_css_class("debugger-paused"); }
+        if paused {
+            self.status_lbl.add_css_class("debugger-paused");
+        } else {
+            self.status_lbl.remove_css_class("debugger-paused");
+        }
     }
-}
-
-fn make_btn(label: &str) -> gtk::Button {
-    let b = gtk::Button::with_label(label);
-    b.add_css_class("inspector-btn");
-    b
-}
-fn scroll_wrap(child: &impl IsA<gtk::Widget>) -> gtk::ScrolledWindow {
-    gtk::ScrolledWindow::builder().child(child).vexpand(true).hexpand(true).build()
-}
-fn mono_text_view(buf: &gtk::TextBuffer) -> gtk::TextView {
-    let v = gtk::TextView::with_buffer(buf);
-    v.set_editable(false);
-    v.set_monospace(true);
-    v.add_css_class("inspector-text");
-    v
-}
-fn clear_list(list: &gtk::ListBox) {
-    while let Some(child) = list.first_child() { list.remove(&child); }
-}
-fn append_row(list: &gtk::ListBox, text: &str) {
-    let lbl = gtk::Label::new(Some(text));
-    lbl.set_halign(gtk::Align::Start);
-    lbl.set_xalign(0.0);
-    lbl.add_css_class("inspector-dom-row");
-    list.append(&lbl);
 }

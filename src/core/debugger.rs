@@ -1,7 +1,7 @@
-use std::collections::BTreeSet;
-use std::fmt::Write as _;
-
 use serde_json::Value;
+
+use crate::core::debugger_format::format_rdp_value;
+pub use crate::core::debugger_format::{format_scope_bindings, format_source_with_lines};
 
 /// A loaded JavaScript source reported by Servo's SpiderMonkey Debugger (`debugger.js`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,7 +38,11 @@ pub struct CallFrame {
 
 impl CallFrame {
     pub fn display_line(&self) -> String {
-        let name = if self.display_name.is_empty() { "(anonymous)" } else { &self.display_name };
+        let name = if self.display_name.is_empty() {
+            "(anonymous)"
+        } else {
+            &self.display_name
+        };
         format!("{name}  @ {}:{}", self.line, self.column)
     }
 }
@@ -74,13 +78,28 @@ impl StepAction {
 /// Events emitted from the localhost Firefox RDP debugger client to the UI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DebuggerEvent {
-    Connected { port: u16 },
+    Connected {
+        port: u16,
+    },
     Sources(Vec<ScriptSource>),
-    SourceContent { actor: String, content: String },
-    BreakableLines { actor: String, lines: Vec<u32> },
-    Paused { reason: String, source_actor: Option<String>, line: Option<u32> },
+    SourceContent {
+        actor: String,
+        content: String,
+    },
+    BreakableLines {
+        actor: String,
+        lines: Vec<u32>,
+    },
+    Paused {
+        reason: String,
+        source_actor: Option<String>,
+        line: Option<u32>,
+    },
     Frames(Vec<CallFrame>),
-    ScopeBindings { frame_actor: String, bindings: Vec<ScopeBinding> },
+    ScopeBindings {
+        frame_actor: String,
+        bindings: Vec<ScopeBinding>,
+    },
     Resumed,
     Disconnected(String),
 }
@@ -126,9 +145,21 @@ pub fn parse_sources_array(items: &[Value]) -> Vec<ScriptSource> {
         .iter()
         .filter_map(|item| {
             let actor = item.get("actor")?.as_str()?.to_string();
-            let url = item.get("url").and_then(Value::as_str).unwrap_or("").to_string();
-            let introduction_type = item.get("introductionType").and_then(Value::as_str).unwrap_or("").to_string();
-            Some(ScriptSource { actor, url, introduction_type })
+            let url = item
+                .get("url")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let introduction_type = item
+                .get("introductionType")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            Some(ScriptSource {
+                actor,
+                url,
+                introduction_type,
+            })
         })
         .collect()
 }
@@ -139,12 +170,32 @@ pub fn parse_frames_array(items: &[Value]) -> Vec<CallFrame> {
         .iter()
         .filter_map(|item| {
             let actor = item.get("actor")?.as_str()?.to_string();
-            let display_name = item.get("displayName").and_then(Value::as_str).unwrap_or("").to_string();
+            let display_name = item
+                .get("displayName")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             let w = item.get("where");
-            let source_actor = w.and_then(|v| v.get("actor")).and_then(Value::as_str).unwrap_or("").to_string();
-            let line = w.and_then(|v| v.get("line")).and_then(Value::as_u64).unwrap_or(0) as u32;
-            let column = w.and_then(|v| v.get("column")).and_then(Value::as_u64).unwrap_or(0) as u32;
-            Some(CallFrame { actor, display_name, source_actor, line, column })
+            let source_actor = w
+                .and_then(|v| v.get("actor"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let line = w
+                .and_then(|v| v.get("line"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32;
+            let column = w
+                .and_then(|v| v.get("column"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32;
+            Some(CallFrame {
+                actor,
+                display_name,
+                source_actor,
+                line,
+                column,
+            })
         })
         .collect()
 }
@@ -196,77 +247,4 @@ fn collect_env(env: &Value, depth: usize, out: &mut Vec<ScopeBinding>) {
     {
         collect_env(parent, depth + 1, out);
     }
-}
-
-fn format_rdp_value(val: &Value) -> String {
-    match val {
-        Value::Null => "null".to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Number(n) => n.to_string(),
-        Value::String(s) => format!("{s:?}"),
-        Value::Array(arr) => format!("Array({})", arr.len()),
-        Value::Object(map) => {
-            if let Some(ty) = map.get("type").and_then(Value::as_str) {
-                return match ty {
-                    "undefined" | "null" | "Infinity" | "-Infinity" | "NaN" | "-0" => ty.to_string(),
-                    "longString" => {
-                        let initial = map.get("initial").and_then(Value::as_str).unwrap_or("");
-                        format!("{initial:?}…")
-                    }
-                    "object" => {
-                        let cls = map.get("class").and_then(Value::as_str).unwrap_or("Object");
-                        format!("[{cls}]")
-                    }
-                    other => format!("<{other}>"),
-                };
-            }
-            val.to_string()
-        }
-    }
-}
-
-/// Render JavaScript source text with 1-based line numbers, breakpoint (`●`),
-/// breakable (`·`), and paused-line (`▶`) gutter markers.
-pub fn format_source_with_lines(
-    content: &str,
-    breakpoints: &BTreeSet<u32>,
-    breakable: &BTreeSet<u32>,
-    paused_line: Option<u32>,
-) -> String {
-    if content.is_empty() {
-        return "// (empty source)".to_string();
-    }
-    let mut out = String::with_capacity(content.len() + 256);
-    for (idx, line) in content.lines().enumerate() {
-        let num = (idx + 1) as u32;
-        let marker = match (paused_line == Some(num), breakpoints.contains(&num)) {
-            (true, true) => "▶●",
-            (true, false) => "▶ ",
-            (false, true) => " ●",
-            (false, false) if breakable.contains(&num) => " ·",
-            (false, false) => "  ",
-        };
-        let _ = writeln!(&mut out, "{marker}{num:>4} │ {line}");
-    }
-    out
-}
-
-/// Format scope bindings for the debugger Scopes text pane.
-pub fn format_scope_bindings(bindings: &[ScopeBinding]) -> String {
-    if bindings.is_empty() {
-        return "No local variables in selected frame.".to_string();
-    }
-    let mut out = String::new();
-    let mut last_scope = "";
-    for b in bindings {
-        if b.scope != last_scope {
-            if !out.is_empty() {
-                out.push('\n');
-            }
-            let _ = writeln!(&mut out, "[{}]", b.scope);
-            last_scope = &b.scope;
-        }
-        let _ = writeln!(&mut out, "  {} = {}", b.name, b.value);
-    }
-    out
 }

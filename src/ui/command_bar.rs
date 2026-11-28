@@ -178,7 +178,9 @@ impl CommandBar {
 
         let this = self.clone();
         self.popup_list.connect_row_activated(move |_, row| {
-            let Ok(idx) = usize::try_from(row.index()) else { return };
+            let Ok(idx) = usize::try_from(row.index()) else {
+                return;
+            };
             let chosen = this.items.borrow().get(idx).map(|i| i.insert_text.clone());
             if let Some(text) = chosen {
                 on_submit(text);

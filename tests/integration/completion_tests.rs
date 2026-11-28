@@ -34,7 +34,11 @@ fn sample_sources() -> CompletionSources {
                 visited_at: 150,
             },
         ],
-        sessions: vec!["default".to_string(), "work".to_string(), "reading".to_string()],
+        sessions: vec![
+            "default".to_string(),
+            "work".to_string(),
+            "reading".to_string(),
+        ],
         plugins: Vec::new(),
     }
 }
@@ -93,7 +97,10 @@ fn completes_urls_fzf_style_across_bookmarks_and_history_without_duplicates() {
     let empty_url = complete_command_input("open ", &sources);
     assert_eq!(empty_url.len(), 4);
     assert_eq!(empty_url[0].kind, CompletionKind::Bookmark);
-    assert_eq!(empty_url[0].insert_text, "open https://doc.rust-lang.org/book/");
+    assert_eq!(
+        empty_url[0].insert_text,
+        "open https://doc.rust-lang.org/book/"
+    );
     assert_eq!(
         empty_url
             .iter()

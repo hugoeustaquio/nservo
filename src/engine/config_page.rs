@@ -27,8 +27,18 @@ pub fn render_config_html(
     let path_html = escape_html(&config_path.display().to_string());
     let ua_cur = escape_html(&config.user_agent);
     let ua_def = escape_html(DEFAULT_USER_AGENT);
-    let ua_mod = if config.user_agent != DEFAULT_USER_AGENT { " modified" } else { "" };
-    let ua_search = escape_html(&format!("user_agent network user agent {} {}", config.user_agent, DEFAULT_USER_AGENT).to_ascii_lowercase());
+    let ua_mod = if config.user_agent != DEFAULT_USER_AGENT {
+        " modified"
+    } else {
+        ""
+    };
+    let ua_search = escape_html(
+        &format!(
+            "user_agent network user agent {} {}",
+            config.user_agent, DEFAULT_USER_AGENT
+        )
+        .to_ascii_lowercase(),
+    );
     let mut rows = format!(
         r#"<tr class="cat-row"><td colspan="4">Network</td></tr>
 <tr class="cfg-row{ua_mod}" data-search="{ua_search}">
@@ -58,7 +68,10 @@ pub fn render_config_html(
         } else {
             ""
         };
-        let search_key = escape_html(&format!("{} {} {} {}", spec.id, spec.category, spec.description, cur).to_ascii_lowercase());
+        let search_key = escape_html(
+            &format!("{} {} {} {}", spec.id, spec.category, spec.description, cur)
+                .to_ascii_lowercase(),
+        );
         let _ = write!(
             &mut rows,
             r#"<tr class="cfg-row{modified_cls}" data-search="{search_key}">
@@ -80,7 +93,13 @@ pub fn render_config_html(
             let cur_raw = config.plugin_key_for(&p.manifest.name);
             let cur = escape_html(cur_raw);
             let modified_cls = if cur_raw != def_raw { " modified" } else { "" };
-            let search_key = escape_html(&format!("plugin {} {} {}", p.manifest.name, p.manifest.description, cur_raw).to_ascii_lowercase());
+            let search_key = escape_html(
+                &format!(
+                    "plugin {} {} {}",
+                    p.manifest.name, p.manifest.description, cur_raw
+                )
+                .to_ascii_lowercase(),
+            );
             let _ = write!(
                 &mut rows,
                 r#"<tr class="cfg-row{modified_cls}" data-search="{search_key}">

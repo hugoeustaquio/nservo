@@ -10,20 +10,17 @@ use crate::ui::bookmark_controller::BookmarkController;
 use crate::ui::command_bar::CommandBar;
 use crate::ui::hint_controller::HintController;
 use crate::ui::history_controller::HistoryController;
-use crate::ui::inspector_panel::{InspectorCallbacks, InspectorPanel};
+use crate::ui::inspector_panel::InspectorPanel;
 use crate::ui::key_handler::{KeyCallbacks, KeyHandler};
 use crate::ui::plugin_controller::PluginController;
 use crate::ui::search_controller::SearchController;
 use crate::ui::session_controller::SessionController;
 use crate::ui::status_bar::{StatusBar, StatusSnapshot};
 use crate::ui::tab_bar::TabBar;
-use crate::ui::tab_view::{TabView, TabViewCallbacks};
-
-type WindowSlot = Rc<RefCell<Option<Rc<BrowserWindow>>>>;
-
-fn get_ctrl(slot: &WindowSlot) -> Option<Rc<BrowserWindow>> {
-    slot.borrow().clone()
-}
+use crate::ui::tab_view::TabView;
+use crate::ui::window_wiring::{
+    WindowSlot, build_command_bar, build_inspector, build_tab_bar, build_tab_view, get_ctrl,
+};
 
 /// Top-level Neovim-inspired GTK4 browser window.
 pub struct BrowserWindow {
@@ -69,77 +66,10 @@ impl BrowserWindow {
 
         // Late-bound controller slot so widget callbacks can reach `Rc<Self>` cleanly.
         let controller_slot: WindowSlot = Rc::new(RefCell::new(None));
-
-        let tab_bar = {
-            let slot = controller_slot.clone();
-            TabBar::new(move |index| {
-                if let Some(ctrl) = get_ctrl(&slot) {
-                    ctrl.exit_hint_mode_if_active();
-                    ctrl.tab_view.select_index(index);
-                }
-            })
-        };
-
-        let command_bar = {
-            let (s_sub, s_cmp) = (controller_slot.clone(), controller_slot.clone());
-            CommandBar::new(
-                move |raw| { if let Some(c) = get_ctrl(&s_sub) { c.submit_prompt(&raw); } },
-                move || get_ctrl(&s_cmp).map(|c| c.load_completion_sources()).unwrap_or_default(),
-            )
-        };
-
-        let inspector = {
-            let (s_eval, s_ref, s_dbg) = (controller_slot.clone(), controller_slot.clone(), controller_slot.clone());
-            let (s_sel, s_pick, s_clr, s_cls) = (
-                controller_slot.clone(), controller_slot.clone(), controller_slot.clone(), controller_slot.clone(),
-            );
-            InspectorPanel::new(InspectorCallbacks {
-                on_eval_js: Rc::new(move |expr| { if let Some(c) = get_ctrl(&s_eval) { c.eval_inspector_js(&expr); } }),
-                on_refresh_dom: Rc::new(move || { if let Some(c) = get_ctrl(&s_ref) { c.refresh_inspector_dom(); } }),
-                on_open_debugger: Rc::new(move || { if let Some(c) = get_ctrl(&s_dbg) { c.connect_debugger_for_active_tab(); } }),
-                on_select_dom_node: Rc::new(move |idx| { if let Some(c) = get_ctrl(&s_sel) { c.inspect_dom_node(idx); } }),
-                on_toggle_picker: Rc::new(move || { if let Some(c) = get_ctrl(&s_pick) { c.toggle_element_picker(); } }),
-                on_clear_console: Rc::new(move || { if let Some(c) = get_ctrl(&s_clr) { c.clear_active_console(); } }),
-                on_close: Rc::new(move || { if let Some(c) = get_ctrl(&s_cls) { c.set_inspector_open(false); } }),
-            })
-        };
-
-        let tab_view = {
-            let s_ch = controller_slot.clone();
-            let s_pop = controller_slot.clone();
-            let s_hint = controller_slot.clone();
-            let s_ins = controller_slot.clone();
-            let s_srch = controller_slot.clone();
-            let s_cfg = controller_slot.clone();
-            let s_hist = controller_slot.clone();
-            let s_nav = controller_slot.clone();
-            TabView::new(TabViewCallbacks {
-                on_state_changed: Rc::new(move || {
-                    if let Some(c) = get_ctrl(&s_ch) { c.sync_chrome(); }
-                }),
-                on_popup_url: Rc::new(move |url| {
-                    if let Some(c) = get_ctrl(&s_pop) { c.tab_view.open_url_in_new_tab(&url); }
-                }),
-                on_hint_event: Rc::new(move |id, ev| {
-                    if let Some(c) = get_ctrl(&s_hint) { c.handle_hint_event(id, ev); }
-                }),
-                on_inspector_event: Rc::new(move |id, ev| {
-                    if let Some(c) = get_ctrl(&s_ins) { c.handle_inspector_event(id, ev); }
-                }),
-                on_search_event: Rc::new(move |id, ev| {
-                    if let Some(c) = get_ctrl(&s_srch) { c.handle_search_event(id, ev); }
-                }),
-                on_config_event: Rc::new(move |id, ev| {
-                    if let Some(c) = get_ctrl(&s_cfg) { c.handle_config_event(id, ev); }
-                }),
-                on_history_sync: Rc::new(move |sync| {
-                    if let Some(c) = get_ctrl(&s_hist) { c.history.handle_sync(sync); }
-                }),
-                on_navigation: Rc::new(move |id| {
-                    if let Some(c) = get_ctrl(&s_nav) { c.handle_navigation(id); }
-                }),
-            })
-        };
+        let tab_bar = build_tab_bar(&controller_slot);
+        let command_bar = build_command_bar(&controller_slot);
+        let inspector = build_inspector(&controller_slot);
+        let tab_view = build_tab_view(&controller_slot);
 
         let content_paned = gtk::Paned::new(gtk::Orientation::Vertical);
         content_paned.set_start_child(Some(tab_view.widget()));
@@ -209,12 +139,17 @@ impl BrowserWindow {
         let on_pending_ctrl = self.clone();
         let cmd_bar = self.command_bar.clone();
         let inspector = self.inspector.clone();
-        self.key_handler.attach(&self.window, KeyCallbacks {
-            on_action: Rc::new(move |action| on_action_ctrl.handle_action(action)),
-            on_pending_changed: Rc::new(move |pending| on_pending_ctrl.set_pending_display(pending)),
-            is_command_entry_empty: Rc::new(move || cmd_bar.is_entry_empty()),
-            is_inspector_focused: Rc::new(move || inspector.has_focus_within()),
-        });
+        self.key_handler.attach(
+            &self.window,
+            KeyCallbacks {
+                on_action: Rc::new(move |action| on_action_ctrl.handle_action(action)),
+                on_pending_changed: Rc::new(move |pending| {
+                    on_pending_ctrl.set_pending_display(pending)
+                }),
+                is_command_entry_empty: Rc::new(move || cmd_bar.is_entry_empty()),
+                is_inspector_focused: Rc::new(move || inspector.has_focus_within()),
+            },
+        );
     }
 
     pub(super) fn set_pending_display(&self, pending: Option<String>) {
@@ -261,7 +196,7 @@ impl BrowserWindow {
         self.sync_chrome();
     }
 
-    fn exit_hint_mode_if_active(&self) {
+    pub(super) fn exit_hint_mode_if_active(&self) {
         if self.mode.get() == Mode::Hint {
             self.set_mode(Mode::Normal);
         }

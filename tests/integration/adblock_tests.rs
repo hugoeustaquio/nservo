@@ -21,7 +21,8 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn temp_dir(label: &str) -> PathBuf {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("nservo-adblock-{label}-{}-{n}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("nservo-adblock-{label}-{}-{n}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     dir
@@ -195,7 +196,9 @@ fn download_and_update_filter_lists_over_local_http() {
             "! v2\n||v1.ads.test^\n||v2.ads.test^\n",
         ];
         for body in payloads {
-            let Ok((mut stream, _)) = listener.accept() else { break; };
+            let Ok((mut stream, _)) = listener.accept() else {
+                break;
+            };
             let mut buf = [0u8; 512];
             let _ = stream.read(&mut buf);
             let resp = format!(

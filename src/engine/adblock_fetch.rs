@@ -88,7 +88,10 @@ pub fn update_all_filter_lists(adblock_dir: &Path) -> UpdateSummary {
 }
 
 fn fetch_url_text(url: &str) -> Result<String, String> {
-    match run_fetch("curl", &["-fsSL", "--connect-timeout", "15", "--max-time", "60", url]) {
+    match run_fetch(
+        "curl",
+        &["-fsSL", "--connect-timeout", "15", "--max-time", "60", url],
+    ) {
         Ok(text) => Ok(text),
         Err(FetchError::NotFound) => {
             run_fetch("wget", &["-qO-", "--timeout=30", url]).map_err(|e| e.into_message())

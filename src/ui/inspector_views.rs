@@ -7,6 +7,79 @@ use gtk::prelude::*;
 
 use crate::core::ConsoleLevel;
 
+/// Callbacks emitted by the built-in GTK4 Web Inspector panel.
+#[derive(Clone)]
+pub struct InspectorCallbacks {
+    pub on_eval_js: Rc<dyn Fn(String)>,
+    pub on_refresh_dom: Rc<dyn Fn()>,
+    pub on_open_debugger: Rc<dyn Fn()>,
+    pub on_select_dom_node: Rc<dyn Fn(usize)>,
+    pub on_toggle_picker: Rc<dyn Fn()>,
+    pub on_clear_console: Rc<dyn Fn()>,
+    pub on_close: Rc<dyn Fn()>,
+}
+
+pub(super) struct InspectorHeader {
+    pub(super) bar: gtk::Box,
+    pub(super) find_btn: gtk::Button,
+    pub(super) console_tab_btn: gtk::Button,
+    pub(super) dom_tab_btn: gtk::Button,
+    pub(super) debugger_tab_btn: gtk::Button,
+    pub(super) refresh_btn: gtk::Button,
+    pub(super) clear_btn: gtk::Button,
+    pub(super) close_btn: gtk::Button,
+}
+
+/// Build the top inspector header toolbar with mode tabs and action buttons.
+pub(super) fn build_inspector_header() -> InspectorHeader {
+    let bar = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    bar.add_css_class("inspector-header");
+
+    let find_btn = make_header_btn("Find");
+    find_btn.set_tooltip_text(Some("Pick an element on the page to inspect in DOM view"));
+    let console_tab_btn = make_header_btn("Console");
+    console_tab_btn.add_css_class("inspector-tab-active");
+    let dom_tab_btn = make_header_btn("DOM");
+    let debugger_tab_btn = make_header_btn("Debugger");
+
+    let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+
+    let refresh_btn = make_header_btn("Refresh DOM");
+    let clear_btn = make_header_btn("Clear");
+    let close_btn = make_header_btn("×");
+
+    for w in [
+        find_btn.upcast_ref::<gtk::Widget>(),
+        console_tab_btn.upcast_ref(),
+        dom_tab_btn.upcast_ref(),
+        debugger_tab_btn.upcast_ref(),
+        spacer.upcast_ref(),
+        refresh_btn.upcast_ref(),
+        clear_btn.upcast_ref(),
+        close_btn.upcast_ref(),
+    ] {
+        bar.append(w);
+    }
+
+    InspectorHeader {
+        bar,
+        find_btn,
+        console_tab_btn,
+        dom_tab_btn,
+        debugger_tab_btn,
+        refresh_btn,
+        clear_btn,
+        close_btn,
+    }
+}
+
+fn make_header_btn(label: &str) -> gtk::Button {
+    let btn = gtk::Button::with_label(label);
+    btn.add_css_class("inspector-btn");
+    btn
+}
+
 /// Build the Console tab (scrollable log output + JS REPL entry).
 pub(super) fn build_console_page() -> (gtk::Box, gtk::TextView, gtk::TextBuffer, gtk::Entry) {
     let buffer = gtk::TextBuffer::new(None);
@@ -57,7 +130,12 @@ pub(super) fn build_console_page() -> (gtk::Box, gtk::TextView, gtk::TextBuffer,
 }
 
 /// Build the DOM tab (left element list + right attributes/styles pane).
-pub(super) fn build_dom_page() -> (gtk::Paned, gtk::ScrolledWindow, gtk::ListBox, gtk::TextBuffer) {
+pub(super) fn build_dom_page() -> (
+    gtk::Paned,
+    gtk::ScrolledWindow,
+    gtk::ListBox,
+    gtk::TextBuffer,
+) {
     let list = gtk::ListBox::new();
     list.add_css_class("inspector-dom-list");
     let left_scroll = gtk::ScrolledWindow::builder()

@@ -20,7 +20,8 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 fn temp_dir(tag: &str) -> PathBuf {
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
     let pid = std::process::id();
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("nservo-plug-{tag}-{pid}-{id}"));
+    let dir =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("nservo-plug-{tag}-{pid}-{id}"));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
@@ -57,12 +58,19 @@ fn plugin_paths_commands_repo_urls_and_completion() {
     );
     assert_eq!(
         parse_command(":plugin-install alice/nservo-reader"),
-        Ok(BrowserAction::InstallPlugin("alice/nservo-reader".to_string()))
+        Ok(BrowserAction::InstallPlugin(
+            "alice/nservo-reader".to_string()
+        ))
     );
-    assert_eq!(parse_command(":plugin-update"), Ok(BrowserAction::UpdatePlugins(None)));
+    assert_eq!(
+        parse_command(":plugin-update"),
+        Ok(BrowserAction::UpdatePlugins(None))
+    );
     assert_eq!(
         parse_command(":plugin-update readability"),
-        Ok(BrowserAction::UpdatePlugins(Some("readability".to_string())))
+        Ok(BrowserAction::UpdatePlugins(Some(
+            "readability".to_string()
+        )))
     );
     assert_eq!(
         parse_command(":plugin-remove readability"),
@@ -128,7 +136,10 @@ fn parses_plugin_stdout_actions_and_runs_bundled_examples() {
 
     let mut mapper = KeyMapper::with_config(cfg);
     let now = Instant::now();
-    assert_eq!(mapper.handle_key(Mode::Normal, KeyInput::Char('z'), now), KeyOutcome::Pending("z".to_string()));
+    assert_eq!(
+        mapper.handle_key(Mode::Normal, KeyInput::Char('z'), now),
+        KeyOutcome::Pending("z".to_string())
+    );
     assert_eq!(
         mapper.handle_key(Mode::Normal, KeyInput::Char('r'), now),
         KeyOutcome::Action(BrowserAction::RunPlugin {
@@ -151,7 +162,11 @@ fn git_install_update_exec_and_remove_plugin_end_to_end() {
     )
     .unwrap();
     let script = origin.join("run.sh");
-    fs::write(&script, "#!/bin/sh\nprintf '{\"op\":\"notice\",\"text\":\"v1:%s\"}\\n' \"$NSERVO_ORIGIN\"\n").unwrap();
+    fs::write(
+        &script,
+        "#!/bin/sh\nprintf '{\"op\":\"notice\",\"text\":\"v1:%s\"}\\n' \"$NSERVO_ORIGIN\"\n",
+    )
+    .unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -182,10 +197,17 @@ fn git_install_update_exec_and_remove_plugin_end_to_end() {
         config_dir: root.clone(),
     };
     let actions = execute_plugin_command(&installed, &ctx).unwrap();
-    assert_eq!(actions, vec![PluginAction::Notice("v1:https://github.com".to_string())]);
+    assert_eq!(
+        actions,
+        vec![PluginAction::Notice("v1:https://github.com".to_string())]
+    );
 
     // Commit v2 upstream and verify :plugin-update pulls it cleanly.
-    fs::write(&script, "#!/bin/sh\nprintf '{\"op\":\"notice\",\"text\":\"v2:%s\"}\\n' \"$NSERVO_ORIGIN\"\n").unwrap();
+    fs::write(
+        &script,
+        "#!/bin/sh\nprintf '{\"op\":\"notice\",\"text\":\"v2:%s\"}\\n' \"$NSERVO_ORIGIN\"\n",
+    )
+    .unwrap();
     git(&["add", "."]);
     git(&["commit", "-m", "v2"]);
 
@@ -195,9 +217,15 @@ fn git_install_update_exec_and_remove_plugin_end_to_end() {
     assert!(summary.failed.is_empty());
 
     let actions_v2 = execute_plugin_command(&installed, &ctx).unwrap();
-    assert_eq!(actions_v2, vec![PluginAction::Notice("v2:https://github.com".to_string())]);
+    assert_eq!(
+        actions_v2,
+        vec![PluginAction::Notice("v2:https://github.com".to_string())]
+    );
 
-    assert_eq!(remove_plugin(&plugins_dir, "demo-plug"), Ok("demo-plug".to_string()));
+    assert_eq!(
+        remove_plugin(&plugins_dir, "demo-plug"),
+        Ok("demo-plug".to_string())
+    );
     assert!(discover_plugins(&plugins_dir).is_empty());
 
     let _ = fs::remove_dir_all(&root);

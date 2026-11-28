@@ -5,51 +5,14 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::core::config_specs::action_for_id;
+pub use crate::core::config_specs::{SHORTCUT_SPECS, ShortcutSpec};
 use crate::core::plugins::InstalledPlugin;
-use crate::core::{BrowserAction, Mode, default_config_path};
-
-/// Metadata describing one customizable Normal-mode keyboard shortcut.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ShortcutSpec {
-    pub id: &'static str,
-    pub default_key: &'static str,
-    pub category: &'static str,
-    pub description: &'static str,
-}
-
-/// Canonical registry of all customizable Normal-mode shortcuts.
-pub const SHORTCUT_SPECS: &[ShortcutSpec] = &[
-    ShortcutSpec { id: "scroll_down", default_key: "j", category: "Navigation", description: "Scroll down (supports numeric count)" },
-    ShortcutSpec { id: "scroll_up", default_key: "k", category: "Navigation", description: "Scroll up (supports numeric count)" },
-    ShortcutSpec { id: "scroll_left", default_key: "h", category: "Navigation", description: "Scroll left (supports numeric count)" },
-    ShortcutSpec { id: "scroll_right", default_key: "l", category: "Navigation", description: "Scroll right (supports numeric count)" },
-    ShortcutSpec { id: "scroll_top", default_key: "gg", category: "Navigation", description: "Scroll to top of page" },
-    ShortcutSpec { id: "scroll_bottom", default_key: "G", category: "Navigation", description: "Scroll to bottom of page" },
-    ShortcutSpec { id: "go_back", default_key: "H", category: "Navigation", description: "Navigate back in history" },
-    ShortcutSpec { id: "go_forward", default_key: "L", category: "Navigation", description: "Navigate forward in history" },
-    ShortcutSpec { id: "reload", default_key: "r", category: "Navigation", description: "Reload current tab" },
-    ShortcutSpec { id: "next_tab", default_key: "gt", category: "Tabs", description: "Switch to next tab" },
-    ShortcutSpec { id: "prev_tab", default_key: "gT", category: "Tabs", description: "Switch to previous tab" },
-    ShortcutSpec { id: "close_tab", default_key: "d", category: "Tabs", description: "Close current tab" },
-    ShortcutSpec { id: "reopen_tab", default_key: "u", category: "Tabs", description: "Reopen last closed tab" },
-    ShortcutSpec { id: "open_prompt", default_key: "o", category: "Commands & Modes", description: "Open command bar with :open" },
-    ShortcutSpec { id: "open_new_tab_prompt", default_key: "O", category: "Commands & Modes", description: "Open command bar with :Open" },
-    ShortcutSpec { id: "edit_url", default_key: "go", category: "Commands & Modes", description: "Edit current tab URL in command bar" },
-    ShortcutSpec { id: "command_mode", default_key: ":", category: "Commands & Modes", description: "Enter Command mode" },
-    ShortcutSpec { id: "insert_mode", default_key: "i", category: "Commands & Modes", description: "Enter Insert mode" },
-    ShortcutSpec { id: "hints", default_key: "f", category: "Hints & Search", description: "Follow links/inputs with hints" },
-    ShortcutSpec { id: "hints_new_tab", default_key: "F", category: "Hints & Search", description: "Open link in new tab with hints" },
-    ShortcutSpec { id: "search", default_key: "/", category: "Hints & Search", description: "Search text in current page" },
-    ShortcutSpec { id: "search_next", default_key: "n", category: "Hints & Search", description: "Jump to next search match" },
-    ShortcutSpec { id: "search_prev", default_key: "N", category: "Hints & Search", description: "Jump to previous search match" },
-    ShortcutSpec { id: "add_bookmark", default_key: "b", category: "Library & Tools", description: "Bookmark current page" },
-    ShortcutSpec { id: "show_bookmarks", default_key: "B", category: "Library & Tools", description: "Open bookmarks page (about:bookmarks)" },
-    ShortcutSpec { id: "show_history", default_key: "gh", category: "Library & Tools", description: "Open browsing history (about:history)" },
-    ShortcutSpec { id: "toggle_inspector", default_key: "wi", category: "Library & Tools", description: "Toggle Web Inspector drawer" },
-];
+use crate::core::{BrowserAction, default_config_path};
 
 /// Default `User-Agent` header sent by `nservo` unless overridden in `config.json`.
-pub const DEFAULT_USER_AGENT: &str = concat!("NServo ", env!("CARGO_PKG_VERSION"), " powered by Servo");
+pub const DEFAULT_USER_AGENT: &str =
+    concat!("NServo ", env!("CARGO_PKG_VERSION"), " powered by Servo");
 
 fn default_user_agent() -> String {
     DEFAULT_USER_AGENT.to_string()
@@ -86,17 +49,29 @@ impl BrowserConfig {
     }
 
     pub fn load(path: &Path) -> Self {
-        let Ok(raw) = fs::read_to_string(path) else { return Self::default(); };
-        let Ok(parsed) = serde_json::from_str::<BrowserConfig>(&raw) else { return Self::default(); };
+        let Ok(raw) = fs::read_to_string(path) else {
+            return Self::default();
+        };
+        let Ok(parsed) = serde_json::from_str::<BrowserConfig>(&raw) else {
+            return Self::default();
+        };
         let merged = Self::merge_with_defaults(parsed.keybindings, parsed.plugin_keybindings)
             .with_user_agent(Some(&parsed.user_agent));
-        if merged.validate().is_ok() { merged } else { Self::default() }
+        if merged.validate().is_ok() {
+            merged
+        } else {
+            Self::default()
+        }
     }
 
     /// Apply an optional user-agent override, falling back to [`DEFAULT_USER_AGENT`] if blank.
     pub fn with_user_agent(mut self, ua: Option<&str>) -> Self {
         let trimmed = ua.map(str::trim).unwrap_or("");
-        self.user_agent = if trimmed.is_empty() { default_user_agent() } else { trimmed.to_string() };
+        self.user_agent = if trimmed.is_empty() {
+            default_user_agent()
+        } else {
+            trimmed.to_string()
+        };
         self
     }
 
@@ -109,12 +84,17 @@ impl BrowserConfig {
         for spec in SHORTCUT_SPECS {
             if let Some(val) = overrides.get(spec.id) {
                 let trimmed = val.trim();
-                if !trimmed.is_empty() { cfg.keybindings.insert(spec.id.to_string(), trimmed.to_string()); }
+                if !trimmed.is_empty() {
+                    cfg.keybindings
+                        .insert(spec.id.to_string(), trimmed.to_string());
+                }
             }
         }
         for (name, val) in plugin_overrides {
             let trimmed = val.trim();
-            if !trimmed.is_empty() { cfg.plugin_keybindings.insert(name, trimmed.to_string()); }
+            if !trimmed.is_empty() {
+                cfg.plugin_keybindings.insert(name, trimmed.to_string());
+            }
         }
         cfg
     }
@@ -128,8 +108,11 @@ impl BrowserConfig {
             }
             if let Some(def) = p.manifest.default_shortcut.as_deref() {
                 let trimmed = def.trim();
-                if trimmed.is_empty() { continue; }
-                self.plugin_keybindings.insert(p.manifest.name.clone(), trimmed.to_string());
+                if trimmed.is_empty() {
+                    continue;
+                }
+                self.plugin_keybindings
+                    .insert(p.manifest.name.clone(), trimmed.to_string());
                 if self.validate().is_err() {
                     self.plugin_keybindings.remove(&p.manifest.name);
                 }
@@ -141,12 +124,20 @@ impl BrowserConfig {
         self.keybindings
             .get(action_id)
             .map(String::as_str)
-            .or_else(|| SHORTCUT_SPECS.iter().find(|s| s.id == action_id).map(|s| s.default_key))
+            .or_else(|| {
+                SHORTCUT_SPECS
+                    .iter()
+                    .find(|s| s.id == action_id)
+                    .map(|s| s.default_key)
+            })
             .unwrap_or("")
     }
 
     pub fn plugin_key_for(&self, name: &str) -> &str {
-        self.plugin_keybindings.get(name).map(String::as_str).unwrap_or("")
+        self.plugin_keybindings
+            .get(name)
+            .map(String::as_str)
+            .unwrap_or("")
     }
 
     /// Validate user-agent and ensure all built-in/plugin keybindings are non-conflicting.
@@ -161,7 +152,11 @@ impl BrowserConfig {
         let all_entries = SHORTCUT_SPECS
             .iter()
             .map(|s| (s.id.to_string(), self.key_for(s.id)))
-            .chain(self.plugin_keybindings.iter().map(|(k, v)| (format!("plugin:{k}"), v.as_str())));
+            .chain(
+                self.plugin_keybindings
+                    .iter()
+                    .map(|(k, v)| (format!("plugin:{k}"), v.as_str())),
+            );
 
         for (label, seq) in all_entries {
             let chars: Vec<char> = seq.chars().collect();
@@ -169,20 +164,32 @@ impl BrowserConfig {
                 return Err(format!("'{label}' must be 1 or 2 characters (got '{seq}')"));
             }
             if chars.iter().any(|c| c.is_whitespace() || c.is_control()) {
-                return Err(format!("'{label}' cannot contain whitespace or control chars"));
+                return Err(format!(
+                    "'{label}' cannot contain whitespace or control chars"
+                ));
             }
             if matches!(chars[0], '1'..='9') {
-                return Err(format!("'{label}' cannot start with digit '{}' (reserved for counts)", chars[0]));
+                return Err(format!(
+                    "'{label}' cannot start with digit '{}' (reserved for counts)",
+                    chars[0]
+                ));
             }
             if let Some(other) = seen.insert(seq, label.clone()) {
-                return Err(format!("Duplicate shortcut '{seq}' assigned to '{other}' and '{label}'"));
+                return Err(format!(
+                    "Duplicate shortcut '{seq}' assigned to '{other}' and '{label}'"
+                ));
             }
-            if chars.len() == 1 { single_chars.insert(chars[0], label); }
-            else { prefixes.insert(chars[0], label); }
+            if chars.len() == 1 {
+                single_chars.insert(chars[0], label);
+            } else {
+                prefixes.insert(chars[0], label);
+            }
         }
         for (ch, single_id) in &single_chars {
             if let Some(seq_id) = prefixes.get(ch) {
-                return Err(format!("Shortcut '{ch}' ('{single_id}') conflicts with prefix of '{seq_id}'"));
+                return Err(format!(
+                    "Shortcut '{ch}' ('{single_id}') conflicts with prefix of '{seq_id}'"
+                ));
             }
         }
         Ok(())
@@ -191,12 +198,17 @@ impl BrowserConfig {
     /// Persist this configuration to `path` as pretty-printed JSON.
     pub fn save(&self, path: &Path) -> Result<(), String> {
         self.validate()?;
-        if let Some(parent) = path.parent() && !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
         }
-        let json = serde_json::to_string_pretty(self).map_err(|e| format!("Failed to serialize config: {e}"))?;
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize config: {e}"))?;
         let tmp = path.with_extension(format!("json.tmp.{}", std::process::id()));
-        fs::write(&tmp, format!("{json}\n")).map_err(|e| format!("Failed to write {}: {e}", tmp.display()))?;
+        fs::write(&tmp, format!("{json}\n"))
+            .map_err(|e| format!("Failed to write {}: {e}", tmp.display()))?;
         fs::rename(&tmp, path).map_err(|e| {
             let _ = fs::remove_file(&tmp);
             format!("Failed to save {}: {e}", path.display())
@@ -206,7 +218,11 @@ impl BrowserConfig {
     /// Return the set of first characters that begin any 2-key sequence.
     pub fn sequence_prefixes(&self) -> HashSet<char> {
         let mut out = HashSet::new();
-        for seq in self.keybindings.values().chain(self.plugin_keybindings.values()) {
+        for seq in self
+            .keybindings
+            .values()
+            .chain(self.plugin_keybindings.values())
+        {
             let mut chars = seq.chars();
             if let (Some(first), Some(_), None) = (chars.next(), chars.next(), chars.next()) {
                 out.insert(first);
@@ -220,42 +236,14 @@ impl BrowserConfig {
         if let Some((id, _)) = self.keybindings.iter().find(|(_, k)| k.as_str() == seq) {
             return action_for_id(id, count);
         }
-        self.plugin_keybindings.iter().find(|(_, k)| k.as_str() == seq)
-            .map(|(name, _)| BrowserAction::RunPlugin { name: name.clone(), args: String::new() })
+        self.plugin_keybindings
+            .iter()
+            .find(|(_, k)| k.as_str() == seq)
+            .map(|(name, _)| BrowserAction::RunPlugin {
+                name: name.clone(),
+                args: String::new(),
+            })
     }
-}
-
-fn action_for_id(id: &str, count: u32) -> Option<BrowserAction> {
-    Some(match id {
-        "scroll_down" => BrowserAction::ScrollDown(count),
-        "scroll_up" => BrowserAction::ScrollUp(count),
-        "scroll_left" => BrowserAction::ScrollLeft(count),
-        "scroll_right" => BrowserAction::ScrollRight(count),
-        "scroll_top" => BrowserAction::ScrollTop,
-        "scroll_bottom" => BrowserAction::ScrollBottom,
-        "go_back" => BrowserAction::GoBack,
-        "go_forward" => BrowserAction::GoForward,
-        "reload" => BrowserAction::Reload,
-        "next_tab" => BrowserAction::NextTab,
-        "prev_tab" => BrowserAction::PrevTab,
-        "close_tab" => BrowserAction::CloseTab,
-        "reopen_tab" => BrowserAction::ReopenClosedTab,
-        "open_prompt" => BrowserAction::EnterCommandWith("open ".to_string()),
-        "open_new_tab_prompt" => BrowserAction::EnterCommandWith("Open ".to_string()),
-        "edit_url" => BrowserAction::EditCurrentUrl,
-        "command_mode" => BrowserAction::EnterMode(Mode::Command),
-        "insert_mode" => BrowserAction::EnterMode(Mode::Insert),
-        "hints" => BrowserAction::StartHints { new_tab: false },
-        "hints_new_tab" => BrowserAction::StartHints { new_tab: true },
-        "search" => BrowserAction::EnterMode(Mode::Search),
-        "search_next" => BrowserAction::SearchNext,
-        "search_prev" => BrowserAction::SearchPrev,
-        "add_bookmark" => BrowserAction::AddBookmark,
-        "show_bookmarks" => BrowserAction::ShowBookmarks,
-        "show_history" => BrowserAction::ShowHistory(None),
-        "toggle_inspector" => BrowserAction::ToggleInspector,
-        _ => return None,
-    })
 }
 
 /// Messages posted from the built-in `about:config` page back to `nservo`.
@@ -274,12 +262,16 @@ pub fn parse_config_message(body: &str) -> Option<ConfigEvent> {
             let map = val.get("keybindings")?.as_object()?;
             let mut overrides = BTreeMap::new();
             for (k, v) in map {
-                if let Some(s) = v.as_str() { overrides.insert(k.clone(), s.to_string()); }
+                if let Some(s) = v.as_str() {
+                    overrides.insert(k.clone(), s.to_string());
+                }
             }
             let mut plug = BTreeMap::new();
             if let Some(pmap) = val.get("plugin_keybindings").and_then(Value::as_object) {
                 for (k, v) in pmap {
-                    if let Some(s) = v.as_str() { plug.insert(k.clone(), s.to_string()); }
+                    if let Some(s) = v.as_str() {
+                        plug.insert(k.clone(), s.to_string());
+                    }
                 }
             }
             let ua = val.get("user_agent").and_then(Value::as_str);

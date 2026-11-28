@@ -11,7 +11,9 @@ pub enum BrowserAction {
     EditCurrentUrl,
 
     /// Link/element hint mode actions (`f` current tab, `F` new tab).
-    StartHints { new_tab: bool },
+    StartHints {
+        new_tab: bool,
+    },
     HintChar(char),
     HintBackspace,
 
@@ -78,7 +80,10 @@ pub enum BrowserAction {
     UpdateAdblockLists,
 
     /// Plugin management & execution actions (`:plugin`, `:plugin-install`, `:plugin-update`).
-    RunPlugin { name: String, args: String },
+    RunPlugin {
+        name: String,
+        args: String,
+    },
     InstallPlugin(String),
     UpdatePlugins(Option<String>),
     RemovePlugin(String),

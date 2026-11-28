@@ -18,7 +18,8 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 fn temp_config_path(tag: &str) -> PathBuf {
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
     let pid = std::process::id();
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("nservo-cfg-{tag}-{pid}-{id}"));
+    let dir =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("nservo-cfg-{tag}-{pid}-{id}"));
     let _ = fs::remove_dir_all(&dir);
     dir.join("config.json")
 }
@@ -50,9 +51,12 @@ fn config_command_parses_and_completes() {
 fn saves_loads_and_applies_custom_single_and_sequence_keybindings() {
     let path = temp_config_path("custom");
     let mut cfg = BrowserConfig::default();
-    cfg.keybindings.insert("scroll_down".to_string(), "s".to_string());
-    cfg.keybindings.insert("close_tab".to_string(), "x".to_string());
-    cfg.keybindings.insert("toggle_inspector".to_string(), "zi".to_string());
+    cfg.keybindings
+        .insert("scroll_down".to_string(), "s".to_string());
+    cfg.keybindings
+        .insert("close_tab".to_string(), "x".to_string());
+    cfg.keybindings
+        .insert("toggle_inspector".to_string(), "zi".to_string());
     cfg.save(&path).expect("save custom config");
 
     let loaded = BrowserConfig::load(&path);
@@ -63,7 +67,10 @@ fn saves_loads_and_applies_custom_single_and_sequence_keybindings() {
     let mut mapper = KeyMapper::with_config(loaded);
     let now = Instant::now();
     // Old 'd' no longer closes tab; new 'x' does; counted '3s' scrolls down 3 steps.
-    assert_eq!(mapper.handle_key(Mode::Normal, KeyInput::Char('d'), now), KeyOutcome::Consumed);
+    assert_eq!(
+        mapper.handle_key(Mode::Normal, KeyInput::Char('d'), now),
+        KeyOutcome::Consumed
+    );
     assert_eq!(
         mapper.handle_key(Mode::Normal, KeyInput::Char('x'), now),
         KeyOutcome::Action(BrowserAction::CloseTab)
@@ -94,19 +101,26 @@ fn saves_loads_and_applies_custom_single_and_sequence_keybindings() {
 #[test]
 fn validates_duplicate_prefix_and_digit_conflicts() {
     let mut dup = BrowserConfig::default();
-    dup.keybindings.insert("close_tab".to_string(), "j".to_string());
+    dup.keybindings
+        .insert("close_tab".to_string(), "j".to_string());
     assert!(dup.validate().is_err());
 
     let mut prefix_clash = BrowserConfig::default();
-    prefix_clash.keybindings.insert("close_tab".to_string(), "g".to_string());
+    prefix_clash
+        .keybindings
+        .insert("close_tab".to_string(), "g".to_string());
     assert!(prefix_clash.validate().is_err());
 
     let mut digit = BrowserConfig::default();
-    digit.keybindings.insert("close_tab".to_string(), "5".to_string());
+    digit
+        .keybindings
+        .insert("close_tab".to_string(), "5".to_string());
     assert!(digit.validate().is_err());
 
     let mut too_long = BrowserConfig::default();
-    too_long.keybindings.insert("close_tab".to_string(), "xyz".to_string());
+    too_long
+        .keybindings
+        .insert("close_tab".to_string(), "xyz".to_string());
     assert!(too_long.validate().is_err());
 }
 
@@ -114,14 +128,17 @@ fn validates_duplicate_prefix_and_digit_conflicts() {
 fn about_config_renders_options_and_parses_save_and_reset_messages() {
     let path = PathBuf::from("/tmp/xdg/nservo/config.json");
     let mut cfg = BrowserConfig::default();
-    cfg.keybindings.insert("close_tab".to_string(), "x".to_string());
+    cfg.keybindings
+        .insert("close_tab".to_string(), "x".to_string());
 
     let html = render_config_html(&cfg, &path, &[]);
     assert!(html.contains("/tmp/xdg/nservo/config.json"));
     assert!(html.contains(CONFIG_MESSAGE_HANDLER));
     assert!(html.contains(r#"data-id="close_tab""#));
     assert!(html.contains(r#"value="x""#));
-    assert!(config_feedback_script(true, "Saved").contains("__nservoConfigStatus(true, \"Saved\")"));
+    assert!(
+        config_feedback_script(true, "Saved").contains("__nservoConfigStatus(true, \"Saved\")")
+    );
 
     let save_msg = r#"{"action":"save","keybindings":{"close_tab":"x"},"plugin_keybindings":{"readability":"zr"}}"#;
     match parse_config_message(save_msg) {
@@ -132,7 +149,10 @@ fn about_config_renders_options_and_parses_save_and_reset_messages() {
         }
         other => panic!("expected Save event, got {other:?}"),
     }
-    assert_eq!(parse_config_message(r#"{"action":"reset"}"#), Some(ConfigEvent::Reset));
+    assert_eq!(
+        parse_config_message(r#"{"action":"reset"}"#),
+        Some(ConfigEvent::Reset)
+    );
     assert_eq!(parse_config_message(r#"{"action":"unknown"}"#), None);
 
     // Partial on-disk config merges cleanly with defaults.
@@ -185,8 +205,18 @@ fn user_agent_defaults_to_nservo_version_and_supports_override() {
         Some(ConfigEvent::Save(parsed)) => assert_eq!(parsed.user_agent, DEFAULT_USER_AGENT),
         other => panic!("expected Save event, got {other:?}"),
     }
-    assert!(BrowserConfig::default().with_user_agent(Some("Bad\r\nHeader")).validate().is_err());
-    assert!(BrowserConfig::default().with_user_agent(Some("NServo café")).validate().is_err());
+    assert!(
+        BrowserConfig::default()
+            .with_user_agent(Some("Bad\r\nHeader"))
+            .validate()
+            .is_err()
+    );
+    assert!(
+        BrowserConfig::default()
+            .with_user_agent(Some("NServo café"))
+            .validate()
+            .is_err()
+    );
 
     if let Some(dir) = path.parent() {
         let _ = fs::remove_dir_all(dir);

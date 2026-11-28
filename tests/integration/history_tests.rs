@@ -26,11 +26,23 @@ fn records_updates_searches_and_clears_history_in_sqlite() {
     let store = HistoryStore::new(db_path.clone());
 
     assert!(!store.record_visit("", "").expect("empty skipped"));
-    assert!(!store.record_visit("about:help", "Help").expect("about skipped"));
-    assert!(!store.record_visit("data:text/html,hi", "").expect("data skipped"));
+    assert!(
+        !store
+            .record_visit("about:help", "Help")
+            .expect("about skipped")
+    );
+    assert!(
+        !store
+            .record_visit("data:text/html,hi", "")
+            .expect("data skipped")
+    );
     assert!(is_recordable_history_url("https://servo.org"));
 
-    assert!(store.record_visit("https://servo.org", "").expect("visit 1"));
+    assert!(
+        store
+            .record_visit("https://servo.org", "")
+            .expect("visit 1")
+    );
     // Consecutive visit to same URL coalesces and fills in title.
     assert!(
         store
@@ -93,7 +105,10 @@ fn sessions_bookmarks_and_history_share_one_sqlite_database() {
         .record_visit("https://servo.org", "Servo")
         .expect("record history");
 
-    assert_eq!(sessions.load("default").expect("load session").tabs.len(), 1);
+    assert_eq!(
+        sessions.load("default").expect("load session").tabs.len(),
+        1
+    );
     assert_eq!(bookmarks.list().expect("list bookmarks").len(), 1);
     assert_eq!(history.recent(10).expect("recent history").len(), 1);
 
@@ -119,7 +134,10 @@ fn keymap_commands_and_html_support_history() {
         KeyOutcome::Action(BrowserAction::ShowHistory(None))
     );
 
-    assert_eq!(parse_command(":history"), Ok(BrowserAction::ShowHistory(None)));
+    assert_eq!(
+        parse_command(":history"),
+        Ok(BrowserAction::ShowHistory(None))
+    );
     assert_eq!(
         parse_command(":hist rust"),
         Ok(BrowserAction::ShowHistory(Some("rust".to_string())))

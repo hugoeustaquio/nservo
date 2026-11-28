@@ -58,8 +58,12 @@ fn startpage_path_uses_xdg_config_home_then_home() {
 fn default_start_page_renders_search_bar_recent_bookmarks_and_history() {
     let dir = temp_dir("startpage-bm");
     let store = BookmarkStore::new(dir.join("nservo.db"));
-    store.add("https://first.example", "First Bookmark").unwrap();
-    store.add("https://second.example", "Second <Bookmark>").unwrap();
+    store
+        .add("https://first.example", "First Bookmark")
+        .unwrap();
+    store
+        .add("https://second.example", "Second <Bookmark>")
+        .unwrap();
 
     // `list_recent` orders most recently added bookmark first.
     let recent_bms = store.list_recent(10).unwrap();
@@ -88,7 +92,9 @@ fn default_start_page_renders_search_bar_recent_bookmarks_and_history() {
     assert!(html.contains(&format!(r#"action="{DEFAULT_SEARCH_ENGINE_ACTION}""#)));
     assert!(html.contains(r#"name="q""#));
 
-    let second_pos = html.find("Second &lt;Bookmark&gt;").expect("second bookmark");
+    let second_pos = html
+        .find("Second &lt;Bookmark&gt;")
+        .expect("second bookmark");
     let first_pos = html.find("First Bookmark").expect("first bookmark");
     assert!(second_pos < first_pos, "newer bookmark must appear first");
 

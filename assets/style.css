@@ -37,6 +37,28 @@ button.tab-button.tab-active label {
     font-weight: bold;
 }
 
+.tab-scroll-btn {
+    background-color: #1f2335;
+    color: #a9b1d6;
+    border: none;
+    border-radius: 2px;
+    padding: 0 0px;
+    min-width: 12px;
+    min-height: 22px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.tab-scroll-btn:hover {
+    background-color: #292e42;
+    color: #7aa2f7;
+}
+
+.tab-scroll-btn:disabled {
+    color: #414868;
+    background-color: #16161e;
+}
+
 .status-bar {
     background-color: #1f2335;
     border-top: 1px solid #292e42;

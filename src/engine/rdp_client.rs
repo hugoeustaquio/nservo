@@ -107,7 +107,10 @@ fn run_session(
     };
 
     let _ = ev_tx.send(DebuggerEvent::Connected { port });
-    let _ = send_packet(&mut stream, &json!({ "to": actors.thread_actor, "type": "sources" }));
+    let _ = send_packet(
+        &mut stream,
+        &json!({ "to": actors.thread_actor, "type": "sources" }),
+    );
     let _ = stream.set_read_timeout(Some(READ_POLL_TIMEOUT));
 
     let mut tmp = [0u8; 8192];
@@ -144,7 +147,9 @@ fn run_session(
             }
             Err(err) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
             Err(err) => {
-                let _ = ev_tx.send(DebuggerEvent::Disconnected(format!("RDP read error: {err}")));
+                let _ = ev_tx.send(DebuggerEvent::Disconnected(format!(
+                    "RDP read error: {err}"
+                )));
                 return;
             }
         }
@@ -155,7 +160,12 @@ fn perform_handshake(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<Sessio
     let _ = stream.set_read_timeout(Some(Duration::from_secs(4)));
     let _greeting = read_next_packet(stream, buf)?;
 
-    let tabs_reply = request_from(stream, buf, "root", &json!({ "to": "root", "type": "listTabs" }))?;
+    let tabs_reply = request_from(
+        stream,
+        buf,
+        "root",
+        &json!({ "to": "root", "type": "listTabs" }),
+    )?;
     let tab_actor = tabs_reply
         .get("tabs")
         .and_then(Value::as_array)
@@ -165,7 +175,12 @@ fn perform_handshake(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<Sessio
         .ok_or_else(|| "No active tab found in Servo DevTools (wait for page load)".to_string())?
         .to_string();
 
-    let target_reply = request_from(stream, buf, &tab_actor, &json!({ "to": tab_actor, "type": "getTarget" }))?;
+    let target_reply = request_from(
+        stream,
+        buf,
+        &tab_actor,
+        &json!({ "to": tab_actor, "type": "getTarget" }),
+    )?;
     let thread_actor = target_reply
         .get("frame")
         .and_then(|f| f.get("threadActor"))
@@ -173,7 +188,12 @@ fn perform_handshake(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<Sessio
         .ok_or_else(|| "Missing threadActor in DevTools getTarget reply".to_string())?
         .to_string();
 
-    let watcher_reply = request_from(stream, buf, &tab_actor, &json!({ "to": tab_actor, "type": "getWatcher" }))?;
+    let watcher_reply = request_from(
+        stream,
+        buf,
+        &tab_actor,
+        &json!({ "to": tab_actor, "type": "getWatcher" }),
+    )?;
     let watcher_actor = watcher_reply
         .get("watcher")
         .and_then(|w| w.get("actor"))
@@ -224,7 +244,9 @@ fn request_from(
             return Ok(pkt);
         }
     }
-    Err(format!("Timed out waiting for reply from '{expected_from}'"))
+    Err(format!(
+        "Timed out waiting for reply from '{expected_from}'"
+    ))
 }
 
 fn read_next_packet(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<Value, String> {
@@ -233,7 +255,9 @@ fn read_next_packet(stream: &mut TcpStream, buf: &mut Vec<u8>) -> Result<Value, 
         if let Some(pkt) = try_decode_rdp_packet(buf)? {
             return Ok(pkt);
         }
-        let n = stream.read(&mut tmp).map_err(|e| format!("RDP read failed: {e}"))?;
+        let n = stream
+            .read(&mut tmp)
+            .map_err(|e| format!("RDP read failed: {e}"))?;
         if n == 0 {
             return Err("Servo DevTools closed connection during handshake".to_string());
         }

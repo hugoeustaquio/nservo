@@ -60,7 +60,9 @@ fn add_deduplicate_and_remove_bookmarks_in_sqlite() {
     assert_eq!(store.list().expect("list").len(), 1);
 
     // Empty title is backfilled when bookmarked again with a real title.
-    store.add("https://rust-lang.org", "").expect("add untitled");
+    store
+        .add("https://rust-lang.org", "")
+        .expect("add untitled");
     let updated = store
         .add("https://rust-lang.org", "Rust")
         .expect("backfill title");
@@ -77,7 +79,9 @@ fn add_deduplicate_and_remove_bookmarks_in_sqlite() {
         removed_idx.map(|b| b.url),
         Some("https://servo.org".to_string())
     );
-    let removed_url = store.remove("https://rust-lang.org").expect("remove by url");
+    let removed_url = store
+        .remove("https://rust-lang.org")
+        .expect("remove by url");
     assert_eq!(removed_url.map(|b| b.title), Some("Rust".to_string()));
     assert!(store.list().expect("list after remove").is_empty());
 
@@ -132,7 +136,10 @@ fn keymap_and_commands_wire_bookmarks() {
     );
 
     assert_eq!(parse_command(":bookmark"), Ok(BrowserAction::AddBookmark));
-    assert_eq!(parse_command(":bookmarks"), Ok(BrowserAction::ShowBookmarks));
+    assert_eq!(
+        parse_command(":bookmarks"),
+        Ok(BrowserAction::ShowBookmarks)
+    );
     assert_eq!(parse_command(":bm"), Ok(BrowserAction::ShowBookmarks));
     assert_eq!(
         parse_command(":bmdel"),

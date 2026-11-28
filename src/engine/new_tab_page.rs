@@ -2,9 +2,7 @@ use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 
-use crate::core::{
-    Bookmark, BookmarkStore, HistoryEntry, HistoryStore, default_startpage_path,
-};
+use crate::core::{Bookmark, BookmarkStore, HistoryEntry, HistoryStore, default_startpage_path};
 
 /// URL assigned to the built-in new-tab starter page (`:tabnew`).
 pub const START_PAGE_URL: &str = "about:start";

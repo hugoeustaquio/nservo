@@ -6,7 +6,9 @@ use gtk::gdk;
 use gtk::glib;
 use gtk::prelude::*;
 
-use crate::core::{BrowserAction, BrowserConfig, KEY_SEQUENCE_TIMEOUT, KeyMapper, KeyOutcome, Mode};
+use crate::core::{
+    BrowserAction, BrowserConfig, KEY_SEQUENCE_TIMEOUT, KeyMapper, KeyOutcome, Mode,
+};
 use crate::ui::im_bridge::{ImBridge, ImOutcome};
 use crate::ui::key_chords::{
     has_non_text_modifier, is_modifier_only, match_ctrl_editing_chord, match_word_motion,

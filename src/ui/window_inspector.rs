@@ -29,7 +29,10 @@ impl BrowserWindow {
             self.inspector.debugger().disconnect();
             return;
         };
-        let endpoint = self.tab_view.active_tab().and_then(|t| t.devtools_endpoint());
+        let endpoint = self
+            .tab_view
+            .active_tab()
+            .and_then(|t| t.devtools_endpoint());
         self.inspector.debugger().connect_to_tab(tab_id, endpoint);
     }
 

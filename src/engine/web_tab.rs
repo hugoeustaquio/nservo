@@ -21,9 +21,7 @@ use crate::engine::inspector_js::{
     INSPECTOR_MESSAGE_HANDLER, clear_highlight_script, eval_in_page_script, inspect_element_script,
     inspector_init_script, snapshot_dom_script,
 };
-use crate::engine::inspector_picker_js::{
-    start_element_picker_script, stop_element_picker_script,
-};
+use crate::engine::inspector_picker_js::{start_element_picker_script, stop_element_picker_script};
 use crate::engine::scroll::{
     SCROLL_MESSAGE_HANDLER, jump_scroll_x_script, jump_scroll_y_script, scroll_hide_css,
     scroll_init_script, smooth_scroll_by_script,
@@ -101,17 +99,28 @@ impl WebTab {
         view.set_vexpand(true);
         view.set_adblock_dir(&default_adblock_dir().to_string_lossy());
 
-        let tab = Self { view, user_content, state: Rc::new(RefCell::new(LoadCoordinator::new(initial))) };
+        let tab = Self {
+            view,
+            user_content,
+            state: Rc::new(RefCell::new(LoadCoordinator::new(initial))),
+        };
         tab.schedule_ready_fallback();
         tab
     }
 
-    pub fn reload_adblock(&self, dir: &str) { self.view.set_adblock_dir(dir); }
-    pub fn devtools_endpoint(&self) -> Option<(u16, String)> { self.view.devtools_endpoint() }
-    pub fn notify_config_result(&self, ok: bool, msg: &str) {
-        self.view.evaluate_javascript(&config_feedback_script(ok, msg));
+    pub fn reload_adblock(&self, dir: &str) {
+        self.view.set_adblock_dir(dir);
     }
-    pub fn view(&self) -> &WebView { &self.view }
+    pub fn devtools_endpoint(&self) -> Option<(u16, String)> {
+        self.view.devtools_endpoint()
+    }
+    pub fn notify_config_result(&self, ok: bool, msg: &str) {
+        self.view
+            .evaluate_javascript(&config_feedback_script(ok, msg));
+    }
+    pub fn view(&self) -> &WebView {
+        &self.view
+    }
 
     pub fn downgrade(&self) -> WeakWebTab {
         WeakWebTab {
@@ -126,7 +135,8 @@ impl WebTab {
     }
 
     pub fn start_hints(&self, new_tab: bool) {
-        self.view.evaluate_javascript(&activate_hints_script(new_tab));
+        self.view
+            .evaluate_javascript(&activate_hints_script(new_tab));
     }
 
     pub fn filter_hints(&self, typed: &str) {

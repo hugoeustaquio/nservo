@@ -193,10 +193,7 @@ fn db_pool() -> &'static Mutex<HashMap<PathBuf, Connection>> {
 
 /// Run `f` against a cached persistent SQLite connection for `path`, avoiding
 /// repeated file opens, schema DDL checks, and PRAGMA setup on every query.
-pub fn with_db<T, E>(
-    path: &Path,
-    f: impl FnOnce(&mut Connection) -> Result<T, E>,
-) -> Result<T, E>
+pub fn with_db<T, E>(path: &Path, f: impl FnOnce(&mut Connection) -> Result<T, E>) -> Result<T, E>
 where
     E: From<StorageError>,
 {

@@ -66,7 +66,9 @@ impl InstalledPlugin {
                 .components()
                 .any(|c| matches!(c, std::path::Component::ParentDir))
         {
-            return Err(format!("Plugin asset path must stay inside plugin dir: '{rel}'"));
+            return Err(format!(
+                "Plugin asset path must stay inside plugin dir: '{rel}'"
+            ));
         }
         Ok(self.dir.join(candidate))
     }
@@ -158,10 +160,16 @@ pub fn load_plugin_from_dir(plugin_dir: &Path) -> Result<InstalledPlugin, String
     validate_plugin_name(&manifest.name)?;
     match manifest.mode {
         PluginMode::PageJs if manifest.script.as_deref().unwrap_or("").trim().is_empty() => {
-            return Err(format!("page_js plugin '{}' requires a 'script' field", manifest.name));
+            return Err(format!(
+                "page_js plugin '{}' requires a 'script' field",
+                manifest.name
+            ));
         }
         PluginMode::Exec if manifest.command.as_deref().unwrap_or("").trim().is_empty() => {
-            return Err(format!("exec plugin '{}' requires a 'command' field", manifest.name));
+            return Err(format!(
+                "exec plugin '{}' requires a 'command' field",
+                manifest.name
+            ));
         }
         _ => {}
     }

@@ -14,9 +14,10 @@ pub(crate) fn handle_command(
     cmd: DebuggerCommand,
 ) -> std::io::Result<()> {
     match cmd {
-        DebuggerCommand::RefreshSources => {
-            send_packet(stream, &json!({ "to": actors.thread_actor, "type": "sources" }))
-        }
+        DebuggerCommand::RefreshSources => send_packet(
+            stream,
+            &json!({ "to": actors.thread_actor, "type": "sources" }),
+        ),
         DebuggerCommand::LoadSource(actor) => {
             send_packet(stream, &json!({ "to": actor, "type": "source" }))?;
             send_packet(stream, &json!({ "to": actor, "type": "getBreakableLines" }))
@@ -27,7 +28,11 @@ pub(crate) fn handle_command(
             column,
             enable,
         } => {
-            let msg_type = if enable { "setBreakpoint" } else { "removeBreakpoint" };
+            let msg_type = if enable {
+                "setBreakpoint"
+            } else {
+                "removeBreakpoint"
+            };
             send_packet(
                 stream,
                 &json!({
@@ -37,9 +42,10 @@ pub(crate) fn handle_command(
                 }),
             )
         }
-        DebuggerCommand::Pause => {
-            send_packet(stream, &json!({ "to": actors.thread_actor, "type": "interrupt" }))
-        }
+        DebuggerCommand::Pause => send_packet(
+            stream,
+            &json!({ "to": actors.thread_actor, "type": "interrupt" }),
+        ),
         DebuggerCommand::Resume(step) => {
             let payload = match step.rdp_resume_limit() {
                 Some(kind) => json!({
@@ -51,9 +57,10 @@ pub(crate) fn handle_command(
             };
             send_packet(stream, &payload)
         }
-        DebuggerCommand::LoadScope(frame_actor) => {
-            send_packet(stream, &json!({ "to": frame_actor, "type": "getEnvironment" }))
-        }
+        DebuggerCommand::LoadScope(frame_actor) => send_packet(
+            stream,
+            &json!({ "to": frame_actor, "type": "getEnvironment" }),
+        ),
         DebuggerCommand::Disconnect => Ok(()),
     }
 }
@@ -136,7 +143,10 @@ pub(crate) fn dispatch_packet(
             content: content.to_string(),
         });
     } else if let Some(lines) = pkt.get("lines").and_then(Value::as_array) {
-        let parsed: Vec<u32> = lines.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect();
+        let parsed: Vec<u32> = lines
+            .iter()
+            .filter_map(|v| v.as_u64().map(|n| n as u32))
+            .collect();
         let _ = ev_tx.send(DebuggerEvent::BreakableLines {
             actor: from.to_string(),
             lines: parsed,

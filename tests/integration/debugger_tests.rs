@@ -81,7 +81,12 @@ fn parses_servo_sources_frames_and_nested_scopes() {
 fn formats_source_gutter_with_breakpoints_and_paused_line() {
     let bps = BTreeSet::from([2u32, 3u32]);
     let breakable = BTreeSet::from([1u32, 2u32, 3u32]);
-    let rendered = format_source_with_lines("let a = 1;\nlet b = 2;\nreturn a + b;", &bps, &breakable, Some(3));
+    let rendered = format_source_with_lines(
+        "let a = 1;\nlet b = 2;\nreturn a + b;",
+        &bps,
+        &breakable,
+        Some(3),
+    );
     assert!(rendered.contains(" ·   1 │ let a = 1;"));
     assert!(rendered.contains(" ●   2 │ let b = 2;"));
     assert!(rendered.contains("▶●   3 │ return a + b;"));
@@ -93,7 +98,9 @@ fn formats_source_gutter_with_breakpoints_and_paused_line() {
 
 #[test]
 fn rdp_client_completes_servo_handshake_breakpoints_and_stepping() {
-    let Ok(listener) = TcpListener::bind("127.0.0.1:0") else { return };
+    let Ok(listener) = TcpListener::bind("127.0.0.1:0") else {
+        return;
+    };
     let port = listener.local_addr().unwrap().port();
 
     let server = thread::spawn(move || {
@@ -106,16 +113,24 @@ fn rdp_client_completes_servo_handshake_breakpoints_and_stepping() {
         s.read_exact(&mut auth).unwrap();
         assert_eq!(&auth, b"25:{\"auth_token\":\"ABCDEF12\"}");
 
-        let _ = s.write_all(&encode_rdp_packet(&json!({ "from": "root", "applicationType": "browser" })));
+        let _ = s.write_all(&encode_rdp_packet(
+            &json!({ "from": "root", "applicationType": "browser" }),
+        ));
 
         loop {
             while let Ok(Some(req)) = try_decode_rdp_packet(&mut buf) {
                 let to = req.get("to").and_then(|v| v.as_str()).unwrap_or("");
                 let ty = req.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 let replies: Vec<serde_json::Value> = match (to, ty) {
-                    ("root", "listTabs") => vec![json!({ "from": "root", "tabs": [{ "actor": "tab1" }] })],
-                    ("tab1", "getTarget") => vec![json!({ "from": "tab1", "frame": { "threadActor": "thread1" } })],
-                    ("tab1", "getWatcher") => vec![json!({ "from": "tab1", "watcher": { "actor": "watcher1" } })],
+                    ("root", "listTabs") => {
+                        vec![json!({ "from": "root", "tabs": [{ "actor": "tab1" }] })]
+                    }
+                    ("tab1", "getTarget") => {
+                        vec![json!({ "from": "tab1", "frame": { "threadActor": "thread1" } })]
+                    }
+                    ("tab1", "getWatcher") => {
+                        vec![json!({ "from": "tab1", "watcher": { "actor": "watcher1" } })]
+                    }
                     ("watcher1", "getBreakpointListActor") => {
                         vec![json!({ "from": "watcher1", "breakpointList": { "actor": "bp1" } })]
                     }
@@ -127,8 +142,12 @@ fn rdp_client_completes_servo_handshake_breakpoints_and_stepping() {
                         "from": "thread1",
                         "sources": [{ "actor": "src1", "url": "https://demo.test/app.js", "introductionType": "scriptElement" }]
                     })],
-                    ("src1", "source") => vec![json!({ "from": "src1", "source": "function hi() {\n  return 42;\n}" })],
-                    ("src1", "getBreakableLines") => vec![json!({ "from": "src1", "lines": [1, 2] })],
+                    ("src1", "source") => vec![
+                        json!({ "from": "src1", "source": "function hi() {\n  return 42;\n}" }),
+                    ],
+                    ("src1", "getBreakableLines") => {
+                        vec![json!({ "from": "src1", "lines": [1, 2] })]
+                    }
                     ("bp1", "setBreakpoint") => vec![json!({ "from": "bp1" })],
                     ("thread1", "interrupt") => vec![
                         json!({ "from": "thread1" }),
@@ -150,7 +169,9 @@ fn rdp_client_completes_servo_handshake_breakpoints_and_stepping() {
                     _ => vec![json!({ "from": to })],
                 };
                 for r in replies {
-                    if s.write_all(&encode_rdp_packet(&r)).is_err() { return; }
+                    if s.write_all(&encode_rdp_packet(&r)).is_err() {
+                        return;
+                    }
                 }
             }
             match s.read(&mut tmp) {
@@ -191,7 +212,9 @@ fn rdp_client_completes_servo_handshake_breakpoints_and_stepping() {
     client.send(DebuggerCommand::Pause);
     wait_for(&|e| matches!(e, DebuggerEvent::Paused { line: Some(2), .. }));
     wait_for(&|e| matches!(e, DebuggerEvent::Frames(f) if f.len() == 1));
-    wait_for(&|e| matches!(e, DebuggerEvent::ScopeBindings { bindings, .. } if bindings.len() == 1));
+    wait_for(
+        &|e| matches!(e, DebuggerEvent::ScopeBindings { bindings, .. } if bindings.len() == 1),
+    );
 
     client.send(DebuggerCommand::Resume(StepAction::StepOver));
     wait_for(&|e| matches!(e, DebuggerEvent::Resumed));

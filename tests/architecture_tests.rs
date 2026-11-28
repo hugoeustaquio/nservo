@@ -23,7 +23,11 @@ fn strip_line_comment(line: &str) -> &str {
 fn find_forbidden_references(dir: &Path, forbidden: &[&str]) -> Vec<String> {
     let mut files = Vec::new();
     collect_rust_files(dir, &mut files);
-    assert!(!files.is_empty(), "expected Rust files in {}", dir.display());
+    assert!(
+        !files.is_empty(),
+        "expected Rust files in {}",
+        dir.display()
+    );
 
     let mut violations = Vec::new();
     for file in files {

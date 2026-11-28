@@ -1,11 +1,15 @@
 pub mod action;
 pub mod adblock;
 mod adblock_match;
+mod adblock_parse;
 pub mod bookmarks;
 pub mod command;
 pub mod completion;
+mod completion_specs;
 pub mod config;
+mod config_specs;
 pub mod debugger;
+mod debugger_format;
 pub mod hints;
 pub mod history;
 pub mod inspector;
@@ -19,6 +23,7 @@ pub mod session;
 pub mod storage;
 pub mod tab_model;
 pub mod text_input;
+mod url_norm;
 
 pub use action::{BrowserAction, ZOOM_STEP, step_zoom};
 pub use adblock::{

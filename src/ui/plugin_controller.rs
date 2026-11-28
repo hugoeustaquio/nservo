@@ -69,14 +69,13 @@ impl PluginController {
             .iter()
             .find(|p| p.manifest.name == name)
             .cloned();
-        let plugin = cached.or_else(|| {
-            self.reload()
-                .into_iter()
-                .find(|p| p.manifest.name == name)
-        });
+        let plugin = cached.or_else(|| self.reload().into_iter().find(|p| p.manifest.name == name));
 
         let Some(plugin) = plugin else {
-            status_bar.show_error(&format!("Plugin '{name}' not found in {}", self.dir.display()));
+            status_bar.show_error(&format!(
+                "Plugin '{name}' not found in {}",
+                self.dir.display()
+            ));
             return;
         };
 
@@ -126,12 +125,7 @@ impl PluginController {
         }
     }
 
-    pub fn install(
-        &self,
-        repo: &str,
-        status_bar: &StatusBar,
-        on_reloaded: Rc<dyn Fn()>,
-    ) {
+    pub fn install(&self, repo: &str, status_bar: &StatusBar, on_reloaded: Rc<dyn Fn()>) {
         let dir = self.dir.clone();
         let repo_owned = repo.to_string();
         status_bar.show_notice(&format!("Plugin: installing {repo}…"));
@@ -155,12 +149,7 @@ impl PluginController {
         });
     }
 
-    pub fn update(
-        &self,
-        target: Option<&str>,
-        status_bar: &StatusBar,
-        on_reloaded: Rc<dyn Fn()>,
-    ) {
+    pub fn update(&self, target: Option<&str>, status_bar: &StatusBar, on_reloaded: Rc<dyn Fn()>) {
         let dir = self.dir.clone();
         let target_owned = target.map(str::to_string);
         status_bar.show_notice("Plugin: updating…");

@@ -13,6 +13,7 @@ mod gpu_tests;
 mod hints_tests;
 mod history_tests;
 mod inspector_tests;
+mod keymap_count_tests;
 mod keymap_tests;
 mod load_state_tests;
 mod plugin_tests;
